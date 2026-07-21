@@ -239,6 +239,42 @@ def test_stock_name_alone_is_not_evidence_for_specific_claim():
     assert RuleInformationAnalyzer().analyze("朋友说公司有大订单", feed).status == "未找到直接相关信息"
 
 
+def test_information_feed_drops_incidental_market_mentions_without_claim_match():
+    now = datetime(2026, 7, 21, 12)
+    news = ensure_news_schema(pd.DataFrame([
+        {
+            "published_at": "2026-07-21 10:00", "title": "某科技股盘中大幅波动",
+            "summary": "盘中价格一度被贵州茅台反超。", "source": "财经媒体", "url": "https://example.com/incidental",
+        },
+        {
+            "published_at": "2026-07-21 09:00", "title": "茅台调整核心产品价格",
+            "summary": "贵州茅台公布最新价格调整。", "source": "财经媒体", "url": "https://example.com/relevant",
+        },
+    ]))
+    feed = build_information_feed(
+        code="600519", name="贵州茅台", reason="我想核实消费需求",
+        news=DataResult(news, "测试新闻"), announcements=DataResult(pd.DataFrame(), "测试公告"), now=now,
+    )
+    titles = [item["title"] for item in feed["items"]]
+    assert "某科技股盘中大幅波动" not in titles
+    assert "茅台调整核心产品价格" in titles
+
+
+def test_information_feed_collapses_same_event_but_preserves_source_coverage():
+    now = datetime(2026, 7, 21, 12)
+    news = ensure_news_schema(pd.DataFrame([
+        {"published_at": "2026-07-21 10:00", "title": "茅台宣布上调产品价格", "summary": "价格上调", "source": "媒体甲", "url": "https://example.com/a"},
+        {"published_at": "2026-07-21 09:00", "title": "贵州茅台核心产品涨价", "summary": "公司调价", "source": "媒体乙", "url": "https://example.com/b"},
+    ]))
+    feed = build_information_feed(
+        code="600519", name="贵州茅台", reason="我想核实价格调整",
+        news=DataResult(news, "测试新闻"), announcements=DataResult(pd.DataFrame(), "测试公告"), now=now,
+    )
+    assert len(feed["items"]) == 1
+    assert set(feed["items"][0]["corroborating_sources"]) == {"媒体甲", "媒体乙"}
+    assert build_event_radar(feed)["source_count"] == 2
+
+
 def test_market_context_is_descriptive_and_offline_safe():
     result = DemoDataProvider().get_price_history("300750")
     context = build_market_context(

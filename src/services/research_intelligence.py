@@ -68,7 +68,12 @@ def build_event_radar(feed: dict) -> dict:
     category_counts = Counter(item.get("category", "其他") for item in items)
     type_counts = Counter(item["event_type"] for item in items)
     stance_counts = Counter(item["stance"] for item in items)
-    source_count = len({item.get("source") for item in items if item.get("source")})
+    sources = set()
+    for item in items:
+        if item.get("source"):
+            sources.add(item["source"])
+        sources.update(source for source in item.get("corroborating_sources", []) if source)
+    source_count = len(sources)
     official_count = category_counts.get("正式披露", 0)
     opinion_count = category_counts.get("市场观点", 0)
     primary_focus = type_counts.most_common(1)[0][0] if type_counts else "暂无事件"
