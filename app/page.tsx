@@ -50,9 +50,10 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 
-type View = "desk" | "research" | "newDecision" | "decision" | "history" | "rules";
+type View = "desk" | "research" | "newDecision" | "decision" | "history" | "portfolio" | "rules";
 type TradeAction = "买入" | "补仓" | "卖出" | "继续观察";
 type UserRules = { investableCapital: number; maxSingleStockValue: number; maxSingleStockRatio: number; singleAmountAlert: number; coolingHours: number; requireInvalidation: boolean };
+type HoldingBook = Record<string, { name: string; value: number }>;
 type DecisionResult = { stock: Stock; action: TradeAction; originalAmount: number; finalAmount: number; result: "已修改" | "维持计划" | "已延迟"; message: string; reason?: string; invalidation?: string; horizon?: string; reviewedAt?: string; ruleSnapshot?: UserRules; issues?: string[]; remainingIssues?: string[]; scenarioLoss?: number; originalScenarioLoss?: number; durationSeconds?: number; evidence?: LiveEvidencePayload };
 
 type Stock = {
@@ -119,9 +120,11 @@ const TOTAL_ASSETS = 238600;
 const LOCAL_DECISION_KEY = "anxin.latestDecision.v1";
 const LOCAL_DECISIONS_KEY = "anxin.decisionRecords.v1";
 const LOCAL_RULES_KEY = "anxin.userRules.v1";
+const LOCAL_HOLDINGS_KEY = "anxin.holdings.v1";
 const DEFAULT_RULES: UserRules = { investableCapital: TOTAL_ASSETS, maxSingleStockValue: 60000, maxSingleStockRatio: 25, singleAmountAlert: 30000, coolingHours: 24, requireInvalidation: true };
 const STRONG_RULES: UserRules = { investableCapital: TOTAL_ASSETS, maxSingleStockValue: 48000, maxSingleStockRatio: 20, singleAmountAlert: 20000, coolingHours: 24, requireInvalidation: true };
-const holdingValues: Record<string, number> = { "600183": 46800, "600036": 57200 };
+const DEFAULT_HOLDINGS: HoldingBook = { "600183": { name: "生益科技", value: 46800 }, "600036": { name: "招商银行", value: 57200 } };
+const holdingValueFor = (holdings: HoldingBook, code: string) => holdings[code]?.value ?? 0;
 
 const researchProfiles: Record<string, { thesis: string; invalidation: string; confirmed: string; uncertain: string; tradeoff: string; gap: string; suggestedReason: string; suggestedAmount: number; rumor: string; inference: string }> = {
   "600183": { thesis: "海外需求改善会带动覆铜板订单与收入增长", invalidation: "下一期收入或经营现金流未改善", confirmed: "利润同比改善已由业绩预告支持", uncertain: "海外订单尚未获得正式披露印证", tradeoff: "估值已在近三年 78% 分位", gap: "订单与现金流证据", suggestedReason: "最近关注度很高，朋友说公司拿到了海外大订单，我觉得现在补仓很快能涨回来。", suggestedAmount: 50000, rumor: "公司拿到了海外大订单", inference: "现在补仓很快能涨回来" },
@@ -153,6 +156,7 @@ const navItems = [
   { id: "desk" as const, label: "工作台", icon: LayoutDashboard },
   { id: "research" as const, label: "股票研究", icon: FileSearch },
   { id: "decision" as const, label: "决策验证", icon: ShieldCheck },
+  { id: "portfolio" as const, label: "我的持仓", icon: BriefcaseBusiness },
   { id: "history" as const, label: "历史记录", icon: History },
   { id: "rules" as const, label: "我的规则", icon: SlidersHorizontal },
 ];
@@ -195,7 +199,7 @@ function AppRail({ view, onView, hasPending }: { view: View; onView: (view: View
 }
 
 function AppHeader({ view, onNewDecision, onSelectStock, onNotice }: { view: View; onNewDecision: () => void; onSelectStock: (stock: Stock) => void; onNotice: (message: string) => void }) {
-  const titles: Record<View, string> = { desk: "工作台", research: "股票研究", newDecision: "新建决策", decision: "决策验证", history: "历史记录", rules: "我的规则" };
+  const titles: Record<View, string> = { desk: "工作台", research: "股票研究", newDecision: "新建决策", decision: "决策验证", history: "历史记录", portfolio: "我的持仓", rules: "我的规则" };
   const [query, setQuery] = useState("");
   const [remoteMatches, setRemoteMatches] = useState<StockSearchItem[]>([]);
   const [searching, setSearching] = useState(false);
@@ -254,7 +258,7 @@ function SectionHeader({ title, meta, action }: { title: string; meta?: string; 
   return <div className="section-header"><div><h2>{title}</h2>{meta && <span>{meta}</span>}</div>{action}</div>;
 }
 
-function TaskRail({ onDecision, onResearch, onHistory, latest }: { onDecision: () => void; onResearch: (stock?: Stock) => void; onHistory: () => void; latest?: DecisionResult }) {
+function TaskRail({ onDecision, onResearch, onHistory, latest, holdings }: { onDecision: () => void; onResearch: (stock?: Stock) => void; onHistory: () => void; latest?: DecisionResult; holdings: HoldingBook }) {
   return (
     <aside className="context-rail">
       <div className="context-heading"><div><strong>今日节奏</strong><span>7月21日</span></div><CalendarClock aria-hidden="true" /></div>
@@ -264,7 +268,7 @@ function TaskRail({ onDecision, onResearch, onHistory, latest }: { onDecision: (
         <li><span><Clock3 /></span><div><strong>收盘后回看</strong><small>记录今日选择与结果</small></div><time>15:10</time></li>
       </ol>
       <Separator />
-      <div className="context-heading small"><div><strong>我的股票</strong><span>2 持仓 · 3 关注</span></div></div>
+      <div className="context-heading small"><div><strong>我的股票</strong><span>{Object.keys(holdings).length} 持仓 · 3 关注</span></div></div>
       <div className="compact-stock-list">
         {stocks.slice(0, 4).map((stock) => <button key={stock.code} onClick={() => onResearch(stock)}><span><b>{stock.name}</b><small>{stock.code}</small></span><span><b>{stock.price.toFixed(2)}</b><PriceChange value={stock.change} /></span></button>)}
       </div>
@@ -274,15 +278,19 @@ function TaskRail({ onDecision, onResearch, onHistory, latest }: { onDecision: (
   );
 }
 
-function PortfolioSnapshot({ latest }: { latest?: DecisionResult }) {
+function PortfolioSnapshot({ latest, holdings, capital }: { latest?: DecisionResult; holdings: HoldingBook; capital: number }) {
+  const positions = Object.entries(holdings).map(([code, item]) => ({ code, ...item })).sort((a, b) => b.value - a.value);
+  const invested = positions.reduce((sum, item) => sum + item.value, 0);
+  const topRatio = capital > 0 && positions[0] ? positions[0].value / capital * 100 : 0;
   return (
     <section className="workspace-section portfolio-snapshot">
-      <SectionHeader title="持仓暴露" meta="模拟持仓 · 数据截面 10:30" action={<Badge variant="outline">固定样例</Badge>} />
+      <SectionHeader title="持仓暴露" meta="读取本设备保存的持仓金额" action={<Badge variant="outline">本地数据</Badge>} />
       <div className="portfolio-grid">
-        <div className="asset-total"><span>记录资产</span><strong>¥238,600</strong><small>4 个行业 · 6 只股票</small></div>
-        <div className="allocation-block"><div className="allocation-bar"><i className="segment electronics" /><i className="segment finance" /><i className="segment consumer" /><i className="segment other" /></div><div className="allocation-legend"><span><i className="electronics" />电子 31%</span><span><i className="finance" />金融 24%</span><span><i className="consumer" />消费 18%</span><span><i className="other" />其他 27%</span></div></div>
-        <Alert className="rule-alert">{latest ? <><CheckCircle2 /><AlertTitle>最近的计划已记录</AlertTitle><AlertDescription>{latest.result === "已延迟" ? `${latest.stock.name}${latest.action}原计划 ¥${latest.originalAmount.toLocaleString()}，已选择稍后再看。` : `${latest.stock.name}${latest.action}由 ¥${latest.originalAmount.toLocaleString()} 调整为 ¥${latest.finalAmount.toLocaleString()}。`}</AlertDescription></> : <><TriangleAlert /><AlertTitle>电子行业接近上限</AlertTitle><AlertDescription>若执行当前补仓计划，行业占比将进一步升高。</AlertDescription></>}</Alert>
+        <div className="asset-total"><span>记录资金 / 已填写持仓</span><strong>¥{capital.toLocaleString()}</strong><small>持仓 ¥{invested.toLocaleString()} · {positions.length} 只股票</small></div>
+        <div className="holding-exposure-list">{positions.length > 0 ? positions.slice(0, 4).map((item) => <div key={item.code}><span><b>{item.name}</b><small>{item.code}</small></span><i><b style={{ width: `${Math.min(100, capital > 0 ? item.value / capital * 100 : 0)}%` }} /></i><em>¥{item.value.toLocaleString()}</em></div>) : <div className="portfolio-empty-inline">尚未填写持仓，可在“我的持仓”中导入。</div>}</div>
+        <Alert className="rule-alert">{latest ? <><CheckCircle2 /><AlertTitle>最近的计划已记录</AlertTitle><AlertDescription>{latest.result === "已延迟" ? `${latest.stock.name}${latest.action}原计划 ¥${latest.originalAmount.toLocaleString()}，已选择稍后再看。` : `${latest.stock.name}${latest.action}由 ¥${latest.originalAmount.toLocaleString()} 调整为 ¥${latest.finalAmount.toLocaleString()}。`}</AlertDescription></> : positions.length > 0 ? <><TriangleAlert /><AlertTitle>最大单股占比 {topRatio.toFixed(1)}%</AlertTitle><AlertDescription>进入决策审查后会再与个人单股金额和比例边界比较。</AlertDescription></> : <><BriefcaseBusiness /><AlertTitle>尚未填写持仓</AlertTitle><AlertDescription>先导入模拟或真实持仓金额，审查结果才会反映你的仓位。</AlertDescription></>}</Alert>
       </div>
+      {positions.length > 0 && <div className="portfolio-footnote">当前最大单股占记录资金 {topRatio.toFixed(1)}%；这里只按用户填写的持仓金额计算，不连接证券账户。</div>}
     </section>
   );
 }
@@ -319,12 +327,12 @@ function RecentTable({ onHistory, latest }: { onHistory?: () => void; latest?: D
   );
 }
 
-function DeskView({ onDecision, onResearch, onHistory, latest }: { onDecision: () => void; onResearch: (stock?: Stock) => void; onHistory: () => void; latest?: DecisionResult }) {
+function DeskView({ onDecision, onResearch, onHistory, latest, holdings, capital }: { onDecision: () => void; onResearch: (stock?: Stock) => void; onHistory: () => void; latest?: DecisionResult; holdings: HoldingBook; capital: number }) {
   const [filter, setFilter] = useState<"全部" | "持仓" | "关注">("全部");
   const visibleChanges = dailyChanges.filter((item) => filter === "全部" || item.scope === filter);
   return (
     <div className="shell-with-context view-enter">
-      <TaskRail onDecision={onDecision} onResearch={onResearch} onHistory={onHistory} latest={latest} />
+      <TaskRail onDecision={onDecision} onResearch={onResearch} onHistory={onHistory} latest={latest} holdings={holdings} />
       <main className="workspace desk-workspace" id="main-content">
         {latest ? <section className="priority-action completed-priority">
           <div className="priority-copy"><div><Badge variant="secondary">最近完成</Badge><span>选择已记录</span></div><h1>{latest.stock.name}{latest.action}计划{latest.result === "已延迟" ? "已暂缓" : latest.result === "已修改" ? "已调整" : "已确认"}</h1><p>原计划 ¥{latest.originalAmount.toLocaleString()}，最终选择 {latest.result === "已延迟" ? "稍后再看" : `¥${latest.finalAmount.toLocaleString()}`}。系统保留原计划、风险检查与最终选择，方便以后复核。</p><div className="priority-reasons"><span><CheckCircle2 />本次审查已完成</span><span><FileSearch />证据与推断已分开</span><span><History />可在历史记录中回看</span></div></div>
@@ -350,17 +358,17 @@ function DeskView({ onDecision, onResearch, onHistory, latest }: { onDecision: (
             <section className="thesis-watch"><SectionHeader title="待复核判断" meta="不是价格提醒" /><button onClick={() => onResearch(stocks.find((stock) => stock.code === "600183"))}><span><Badge variant="secondary">生益科技</Badge><small>上次更新 12 天前</small></span><strong>海外需求改善会带动订单增长</strong><p>新业绩预告支持利润改善，但尚未说明海外订单来源。</p><span className="review-link">查看证据影响 <ArrowRight /></span></button><button onClick={() => onResearch(stocks.find((stock) => stock.code === "000858"))}><span><Badge variant="secondary">五粮液</Badge><small>上次更新 18 天前</small></span><strong>渠道库存将在三季度改善</strong><p>最新行业数据与该判断不一致。</p><span className="review-link">更新观察条件 <ArrowRight /></span></button></section>
           </aside>
         </div>
-        <PortfolioSnapshot latest={latest} />
+        <PortfolioSnapshot latest={latest} holdings={holdings} capital={capital} />
         <RecentTable onHistory={onHistory} latest={latest} />
       </main>
     </div>
   );
 }
 
-function StockRail({ selected, onSelect, followedStocks, liveQuote }: { selected: Stock; onSelect: (stock: Stock) => void; followedStocks: Record<string, boolean>; liveQuote?: LiveQuote }) {
+function StockRail({ selected, onSelect, followedStocks, liveQuote, holdings }: { selected: Stock; onSelect: (stock: Stock) => void; followedStocks: Record<string, boolean>; liveQuote?: LiveQuote; holdings: HoldingBook }) {
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState<"关注" | "持仓" | "最近">("关注");
-  const holdingCodes = new Set(Object.keys(holdingValues));
+  const holdingCodes = new Set(Object.keys(holdings));
   const availableStocks = stocks.some((stock) => stock.code === selected.code) ? stocks : [selected, ...stocks];
   const filteredStocks = availableStocks.filter((stock) => {
     const matchesQuery = stock.name.includes(query.trim()) || stock.code.includes(query.trim()) || stock.industry.includes(query.trim());
@@ -381,12 +389,12 @@ function StockRail({ selected, onSelect, followedStocks, liveQuote }: { selected
   );
 }
 
-function StartDecisionView({ stock, onSelect, action, setAction, onResearch, onContinue }: { stock: Stock; onSelect: (stock: Stock) => void; action: TradeAction; setAction: (action: TradeAction) => void; onResearch: () => void; onContinue: () => void }) {
+function StartDecisionView({ stock, onSelect, action, setAction, onResearch, onContinue, holdings, capital }: { stock: Stock; onSelect: (stock: Stock) => void; action: TradeAction; setAction: (action: TradeAction) => void; onResearch: () => void; onContinue: () => void; holdings: HoldingBook; capital: number }) {
   const [query, setQuery] = useState("");
   const [remoteMatches, setRemoteMatches] = useState<StockSearchItem[]>([]);
   const [searching, setSearching] = useState(false);
-  const holdingValue = holdingValues[stock.code] ?? 0;
-  const holdingRatio = holdingValue / TOTAL_ASSETS * 100;
+  const holdingValue = holdingValueFor(holdings, stock.code);
+  const holdingRatio = capital > 0 ? holdingValue / capital * 100 : 0;
   const localMatches = useMemo(() => stocks.filter((item) => item.name.includes(query.trim()) || item.code.includes(query.trim()) || item.industry.includes(query.trim())), [query]);
   useEffect(() => {
     const normalized = query.trim();
@@ -424,7 +432,7 @@ function StartDecisionView({ stock, onSelect, action, setAction, onResearch, onC
           <section className="stock-picker-panel">
             <label className="stock-picker-search"><Search /><input value={query} onChange={(event) => { const next = event.target.value; setQuery(next); setRemoteMatches([]); const normalized = next.trim(); const hasLocal = stocks.some((item) => item.name.includes(normalized) || item.code.includes(normalized) || item.industry.includes(normalized)); setSearching(Boolean(normalized) && !hasLocal); }} placeholder="输入股票名称、代码或行业，例如半导体" aria-label="选择决策股票" /></label>
             <div className="stock-picker-heading"><strong>选择股票</strong><span>{searching ? "正在搜索 A 股列表…" : `${matches.length} 只可用`}</span></div>
-            <div className="stock-picker-list">{matches.map((item) => { const held = holdingValues[item.code] ?? 0; return <button key={item.code} className={item.code === stock.code ? "selected" : ""} aria-pressed={item.code === stock.code} onClick={() => onSelect(item)}><span className="stock-picker-ident"><i>{item.name.slice(0, 1)}</i><span><strong>{item.name}</strong><small>{item.code}.{item.market} · {item.industry}</small></span></span><span className="stock-picker-quote">{item.price > 0 ? <><strong>{item.price.toFixed(2)}</strong><PriceChange value={item.change} /></> : <small>研究页载入</small>}</span><span className="holding-state">{held > 0 ? `持仓 ¥${held.toLocaleString()}` : "未持仓"}</span><CheckCircle2 /></button>; })}{matches.length === 0 && <div className="stock-picker-empty"><Search /><strong>{searching ? "正在搜索 A 股列表…" : "没有找到匹配股票"}</strong><span>{searching ? "支持股票简称和 6 位代码" : "可输入股票简称、6 位代码或行业关键词"}</span></div>}</div>
+            <div className="stock-picker-list">{matches.map((item) => { const held = holdingValueFor(holdings, item.code); return <button key={item.code} className={item.code === stock.code ? "selected" : ""} aria-pressed={item.code === stock.code} onClick={() => onSelect(item)}><span className="stock-picker-ident"><i>{item.name.slice(0, 1)}</i><span><strong>{item.name}</strong><small>{item.code}.{item.market} · {item.industry}</small></span></span><span className="stock-picker-quote">{item.price > 0 ? <><strong>{item.price.toFixed(2)}</strong><PriceChange value={item.change} /></> : <small>研究页载入</small>}</span><span className="holding-state">{held > 0 ? `持仓 ¥${held.toLocaleString()}` : "未持仓"}</span><CheckCircle2 /></button>; })}{matches.length === 0 && <div className="stock-picker-empty"><Search /><strong>{searching ? "正在搜索 A 股列表…" : "没有找到匹配股票"}</strong><span>{searching ? "支持股票简称和 6 位代码" : "可输入股票简称、6 位代码或行业关键词"}</span></div>}</div>
           </section>
           <aside className="decision-setup-panel">
             <div className="selected-stock-summary"><span><i>{stock.name.slice(0, 1)}</i><span><small>当前选择</small><strong>{stock.name}</strong><em>{stock.code}.{stock.market}</em></span></span><PriceChange value={stock.change} /></div>
@@ -488,10 +496,10 @@ function PriceChart({ stock, liveHistory }: { stock: Stock; liveHistory?: LiveHi
   );
 }
 
-function ResearchActionPanel({ stock, action, setAction, onDecision, saved, onSave, dataStatus }: { stock: Stock; action: TradeAction; setAction: (action: TradeAction) => void; onDecision: () => void; saved: boolean; onSave: () => void; dataStatus: InformationSnapshot["status"] | "loading" }) {
+function ResearchActionPanel({ stock, action, setAction, onDecision, saved, onSave, dataStatus, holdings, capital }: { stock: Stock; action: TradeAction; setAction: (action: TradeAction) => void; onDecision: () => void; saved: boolean; onSave: () => void; dataStatus: InformationSnapshot["status"] | "loading"; holdings: HoldingBook; capital: number }) {
   const actions: TradeAction[] = ["买入", "补仓", "卖出", "继续观察"];
-  const holdingValue = holdingValues[stock.code] ?? 0;
-  const holdingRatio = holdingValue / TOTAL_ASSETS * 100;
+  const holdingValue = holdingValueFor(holdings, stock.code);
+  const holdingRatio = capital > 0 ? holdingValue / capital * 100 : 0;
   return (
     <aside className="research-aside">
       <div className="aside-heading"><Target /><div><h2>准备做什么</h2><p>针对 {stock.name}</p></div></div>
@@ -505,7 +513,7 @@ function ResearchActionPanel({ stock, action, setAction, onDecision, saved, onSa
   );
 }
 
-function ResearchView({ stock, setStock, action, setAction, onDecision }: { stock: Stock; setStock: (stock: Stock) => void; action: TradeAction; setAction: (action: TradeAction) => void; onDecision: () => void }) {
+function ResearchView({ stock, setStock, action, setAction, onDecision, holdings, capital }: { stock: Stock; setStock: (stock: Stock) => void; action: TradeAction; setAction: (action: TradeAction) => void; onDecision: () => void; holdings: HoldingBook; capital: number }) {
   const [panel, setPanel] = useState<"概览" | "价格与事件" | "证据链" | "待验证问题">("概览");
   const [followedStocks, setFollowedStocks] = useState<Record<string, boolean>>({ "600183": true, "688981": true, "000858": true });
   const [savedResearch, setSavedResearch] = useState<Record<string, boolean>>({});
@@ -581,7 +589,7 @@ function ResearchView({ stock, setStock, action, setAction, onDecision }: { stoc
         : "实时资料暂不可用。下方判断档案仅用于演示工作流，不代表当前事实。 ");
   return (
     <div className="shell-with-context view-enter">
-      <StockRail selected={stock} onSelect={setStock} followedStocks={followedStocks} liveQuote={quote} />
+      <StockRail selected={stock} onSelect={setStock} followedStocks={followedStocks} liveQuote={quote} holdings={holdings} />
       <main className="research-layout" id="main-content">
         <article className="workspace research-dossier">
           <header className="stock-dossier-header">
@@ -604,7 +612,7 @@ function ResearchView({ stock, setStock, action, setAction, onDecision }: { stoc
           {panel === "证据链" && <section className="research-panel evidence-panel"><div className="evidence-summary"><div><BarChart3 /><span><strong>{currentEvidence?.status === "loading" ? "正在核实来源" : `${sourceCount} 个独立来源`}</strong><small>{currentEvidence?.status === "loading" ? "行情已经独立载入，无需等待证据检索" : `正式披露 ${officialCount} · 共 ${evidenceCount} 条公开资料`}</small></span></div><div><strong>{officialCount} / {evidenceCount}</strong><span>正式披露</span></div><div className="attention"><strong>{currentEvidence?.status === "loading" ? "检索中" : assessmentStatus}</strong><span>{liveEvidence?.assessment?.mode === "openai" ? "AI 受限于当前证据" : "规则核实结果"}</span></div></div><SectionHeader title="证据如何影响判断" meta={liveEvidence?.assessment?.summary ?? (currentEvidence?.status === "loading" ? "正在检索公司公告与公开报道" : "先看来源，再看结论")} action={<Badge variant="outline">{currentEvidence?.status === "loading" ? "核实中" : liveEvidence?.feed?.data_mode === "live" ? "实时公开资料" : "资料降级"}</Badge>} />{currentEvidence?.status === "loading" ? <div className="evidence-loading-state"><FileSearch /><strong>公开资料正在并行核实</strong><span>你可以先查看行情，结果返回后会自动更新。</span></div> : <EvidenceList stockCode={stock.code} liveEvidence={liveEvidence} />}</section>}
           {panel === "待验证问题" && <section className="research-panel questions-section"><SectionHeader title="下一步要验证什么" meta="这些问题会带入决策审查" /><ol><li><span>01</span><p><strong>{profile.gap}何时能够得到确认？</strong><small>优先使用公司公告和下一期财报验证。</small></p><Badge variant="outline">财报发布后</Badge></li><li><span>02</span><p><strong>当前价格是否已经计入主要预期？</strong><small>当前估值位置为 {stock.valuation}。</small></p><Badge variant="outline">持续观察</Badge></li><li><span>03</span><p><strong>什么变化会推翻当前判断？</strong><small>{profile.invalidation}。</small></p><Badge variant="secondary">已设置</Badge></li></ol></section>}
         </article>
-        <ResearchActionPanel stock={effectiveStock} action={action} setAction={setAction} onDecision={() => { setStock(effectiveStock); onDecision(); }} saved={saved} dataStatus={dataStatus} onSave={() => setSavedResearch((current) => ({ ...current, [stock.code]: !saved }))} />
+        <ResearchActionPanel stock={effectiveStock} action={action} setAction={setAction} onDecision={() => { setStock(effectiveStock); onDecision(); }} saved={saved} dataStatus={dataStatus} holdings={holdings} capital={capital} onSave={() => setSavedResearch((current) => ({ ...current, [stock.code]: !saved }))} />
       </main>
     </div>
   );
@@ -675,9 +683,70 @@ function RulesView({ rules, onSave, onBack }: { rules: UserRules; onSave: (rules
   );
 }
 
-function DecisionView({ stock, action, rules, onEditRules, onDone, onBack }: { stock: Stock; action: TradeAction; rules: UserRules; onEditRules: () => void; onDone: (result: DecisionResult) => void; onBack: () => void }) {
+function parseHoldingCsv(text: string): HoldingBook {
+  const rows = text.replace(/^\uFEFF/, "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (rows.length < 2) return {};
+  const header = rows[0].split(",").map((cell) => cell.trim().replace(/^"|"$/g, ""));
+  const codeIndex = header.findIndex((item) => ["代码", "股票代码", "code"].includes(item.toLowerCase()));
+  const nameIndex = header.findIndex((item) => ["名称", "股票名称", "name"].includes(item.toLowerCase()));
+  const valueIndex = header.findIndex((item) => ["持仓金额", "金额", "市值", "value"].includes(item.toLowerCase()));
+  if (codeIndex < 0 || valueIndex < 0) return {};
+  return rows.slice(1).reduce<HoldingBook>((book, line) => {
+    const cells = line.split(",").map((cell) => cell.trim().replace(/^"|"$/g, ""));
+    const rawCode = (cells[codeIndex] || "").split(".")[0].replace(/\D/g, "").padStart(6, "0");
+    const value = Number((cells[valueIndex] || "").replace(/[¥￥,\s]/g, ""));
+    if (/^\d{6}$/.test(rawCode) && Number.isFinite(value) && value > 0) book[rawCode] = { name: cells[nameIndex] || rawCode, value: Math.round(value) };
+    return book;
+  }, {});
+}
+
+function HoldingsView({ holdings, capital, onChange, onNotice }: { holdings: HoldingBook; capital: number; onChange: (holdings: HoldingBook) => void; onNotice: (message: string) => void }) {
+  const [code, setCode] = useState("");
+  const [name, setName] = useState("");
+  const [value, setValue] = useState("");
+  const positions = Object.entries(holdings).map(([itemCode, item]) => ({ code: itemCode, ...item })).sort((a, b) => b.value - a.value);
+  const invested = positions.reduce((sum, item) => sum + item.value, 0);
+  const addHolding = () => {
+    const normalized = code.trim().split(".")[0].replace(/\D/g, "").padStart(6, "0");
+    const amount = Number(value);
+    if (!/^\d{6}$/.test(normalized) || !Number.isFinite(amount) || amount <= 0) {
+      onNotice("请输入 6 位股票代码和大于 0 的持仓金额");
+      return;
+    }
+    onChange({ ...holdings, [normalized]: { name: name.trim() || normalized, value: Math.round(amount) } });
+    setCode(""); setName(""); setValue("");
+    onNotice("持仓已保存在本设备");
+  };
+  const importCsv = async (file?: File) => {
+    if (!file) return;
+    const parsed = parseHoldingCsv(await file.text());
+    if (!Object.keys(parsed).length) {
+      onNotice("没有识别到持仓；请使用列：代码,名称,持仓金额");
+      return;
+    }
+    onChange(parsed);
+    onNotice(`已导入 ${Object.keys(parsed).length} 只持仓`);
+  };
+  const exportCsv = () => {
+    const lines = [["代码", "名称", "持仓金额"], ...positions.map((item) => [item.code, item.name, item.value])];
+    const csv = `\uFEFF${lines.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n")}`;
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a"); link.href = url; link.download = "安心看股-持仓备份.csv"; link.click(); URL.revokeObjectURL(url);
+  };
+  return <main className="workspace holdings-workspace view-enter" id="main-content">
+    <section className="holdings-summary"><div><span>记录资金</span><strong>¥{capital.toLocaleString()}</strong><small>来自“我的规则”</small></div><div><span>已填写持仓</span><strong>¥{invested.toLocaleString()}</strong><small>{positions.length} 只股票</small></div><div><span>未分配金额</span><strong>¥{Math.max(0, capital - invested).toLocaleString()}</strong><small>{invested > capital ? `持仓比记录资金多 ¥${(invested - capital).toLocaleString()}` : "仅按填写金额计算"}</small></div></section>
+    <section className="holdings-editor-grid">
+      <div className="holdings-table-panel"><SectionHeader title="我的持仓" meta="仅保存在当前浏览器，不连接证券账户" action={<div className="table-actions"><label className="import-holdings-button">导入 CSV<input type="file" accept=".csv,text/csv" onChange={(event) => { void importCsv(event.target.files?.[0]); event.target.value = ""; }} /></label><Button variant="outline" size="sm" onClick={exportCsv} disabled={!positions.length}>导出 CSV</Button></div>} />
+        {positions.length ? <Table><TableHeader><TableRow><TableHead>股票</TableHead><TableHead className="numeric">持仓金额</TableHead><TableHead className="numeric">占记录资金</TableHead><TableHead /></TableRow></TableHeader><TableBody>{positions.map((item) => <TableRow key={item.code}><TableCell><strong>{item.name}</strong><small className="cell-subtext">{item.code}</small></TableCell><TableCell className="numeric">¥{item.value.toLocaleString()}</TableCell><TableCell className="numeric">{capital > 0 ? (item.value / capital * 100).toFixed(1) : "0.0"}%</TableCell><TableCell className="numeric"><Button variant="ghost" size="icon-sm" aria-label={`删除 ${item.name}`} onClick={() => { const next = { ...holdings }; delete next[item.code]; onChange(next); }}><X /></Button></TableCell></TableRow>)}</TableBody></Table> : <div className="holdings-empty"><BriefcaseBusiness /><strong>还没有填写持仓</strong><span>可以使用模拟金额，不需要填写真实账户资产。</span></div>}
+      </div>
+      <aside className="holding-add-panel"><SectionHeader title="添加或更新" meta="相同代码会覆盖原金额" /><label><span>6 位股票代码</span><Input value={code} onChange={(event) => setCode(event.target.value)} placeholder="例如 600519" inputMode="numeric" /></label><label><span>股票名称</span><Input value={name} onChange={(event) => setName(event.target.value)} placeholder="例如 贵州茅台" /></label><label><span>持仓金额</span><div className="money-input"><span>¥</span><Input value={value} onChange={(event) => setValue(event.target.value)} type="number" min="0" step="1000" placeholder="50000" /></div></label><Button size="lg" onClick={addHolding}><Plus data-icon="inline-start" />保存持仓</Button><div className="holding-privacy-note"><ShieldCheck /><p><strong>隐私边界</strong><span>不需要券商账号、持仓数量或成交明细；这里仅用于计算仓位比例和下跌情景。</span></p></div><button className="reset-demo-holdings" onClick={() => { onChange(DEFAULT_HOLDINGS); onNotice("已恢复模拟持仓"); }}>恢复模拟持仓</button></aside>
+    </section>
+  </main>;
+}
+
+function DecisionView({ stock, action, rules, holdings, onEditRules, onDone, onBack }: { stock: Stock; action: TradeAction; rules: UserRules; holdings: HoldingBook; onEditRules: () => void; onDone: (result: DecisionResult) => void; onBack: () => void }) {
   const profile = researchProfiles[stock.code] ?? genericResearchProfile;
-  const currentHolding = holdingValues[stock.code] ?? 0;
+  const currentHolding = holdingValueFor(holdings, stock.code);
   const currentRatio = currentHolding / rules.investableCapital * 100;
   const initialAmount = profile.suggestedAmount;
   const [amount, setAmount] = useState(initialAmount);
@@ -696,6 +765,7 @@ function DecisionView({ stock, action, rules, onEditRules, onDone, onBack }: { s
   const scenarioLoss = Math.round((currentHolding + amount) * 0.2);
   const effectiveMaxHolding = Math.min(rules.maxSingleStockValue, rules.investableCapital * rules.maxSingleStockRatio / 100);
   const effectiveMaxRatio = effectiveMaxHolding / rules.investableCapital * 100;
+  const currentPositionAlreadyOver = currentHolding > effectiveMaxHolding;
   const isOverPosition = currentHolding + amount > effectiveMaxHolding;
   const over = Math.max(0, Math.ceil(ratio - effectiveMaxRatio));
   const maxAllowedAmount = Math.max(0, Math.floor((effectiveMaxHolding - currentHolding) / 1000) * 1000);
@@ -748,7 +818,7 @@ function DecisionView({ stock, action, rules, onEditRules, onDone, onBack }: { s
             <article className="evidence-readiness"><div className="visual-title"><span>正式披露覆盖</span><strong>{officialEvidence} / {evidenceItems}</strong><small>{evidenceCheck ? "正式披露 / 全部资料" : "等待核实"}</small></div><div className="evidence-dots"><i className={officialEvidence > 0 ? "verified" : ""}>{officialEvidence > 0 ? <Check /> : <FileSearch />}</i><i><TriangleAlert /></i><i><Sparkles /></i></div><dl><div><dt>正式披露</dt><dd>{evidenceCheck ? officialEvidence : "—"}</dd></div><div><dt>公开资料</dt><dd>{evidenceCheck ? evidenceItems : "—"}</dd></div><div><dt>核实结论</dt><dd>{evidenceStatus ?? "尚未检索"}</dd></div></dl></article>
           </div>
         </section>
-        {isOverPosition && <Alert className="decision-alert"><TriangleAlert /><AlertTitle>当前计划超过你设定的单股边界</AlertTitle><AlertDescription>计划金额 ¥{amount.toLocaleString()} 会使单股占比达到 {ratio}%。将金额降至约 ¥{maxAllowedAmount.toLocaleString()}，可同时满足 ¥{rules.maxSingleStockValue.toLocaleString()} 和 {rules.maxSingleStockRatio}% 两项上限。</AlertDescription></Alert>}
+        {isOverPosition && <Alert className="decision-alert"><TriangleAlert /><AlertTitle>{currentPositionAlreadyOver ? "当前持仓已经高于个人单股边界" : "当前计划超过你设定的单股边界"}</AlertTitle><AlertDescription>{currentPositionAlreadyOver ? <>当前持仓 ¥{currentHolding.toLocaleString()}，占记录资金 {currentRatio.toFixed(1)}%。任何新增金额都无法使计划后仓位回到边界内；¥0 仅表示不再增加暴露，不代表当前仓位符合边界。</> : <>计划金额 ¥{amount.toLocaleString()} 会使单股占比达到 {ratio}%。将金额降至约 ¥{maxAllowedAmount.toLocaleString()}，可同时满足 ¥{rules.maxSingleStockValue.toLocaleString()} 和 {rules.maxSingleStockRatio}% 两项上限。</>}</AlertDescription></Alert>}
         {overSingleAlert && <Alert className="decision-alert amount-alert"><Gauge /><AlertTitle>本次金额达到你的单笔提醒线</AlertTitle><AlertDescription>计划金额 ¥{amount.toLocaleString()} 高于提醒值 ¥{rules.singleAmountAlert.toLocaleString()}。这不是禁止操作，只是提醒再次核对理由和下跌情景。</AlertDescription></Alert>}
         <section className="decision-work-grid">
           <div className="plan-form">
@@ -823,6 +893,7 @@ export default function Home() {
   const [latestDecision, setLatestDecision] = useState<DecisionResult>();
   const [decisionRecords, setDecisionRecords] = useState<DecisionResult[]>([]);
   const [rules, setRules] = useState<UserRules>(DEFAULT_RULES);
+  const [holdings, setHoldings] = useState<HoldingBook>(DEFAULT_HOLDINGS);
   useEffect(() => {
     const loadSavedState = () => {
       try {
@@ -847,10 +918,16 @@ export default function Home() {
           const parsedRules = JSON.parse(savedRules) as UserRules;
           if (parsedRules?.investableCapital > 0 && parsedRules?.maxSingleStockRatio > 0) setRules(parsedRules);
         }
+        const savedHoldings = window.localStorage.getItem(LOCAL_HOLDINGS_KEY);
+        if (savedHoldings) {
+          const parsedHoldings = JSON.parse(savedHoldings) as HoldingBook;
+          if (parsedHoldings && typeof parsedHoldings === "object") setHoldings(parsedHoldings);
+        }
       } catch {
         window.localStorage.removeItem(LOCAL_DECISION_KEY);
         window.localStorage.removeItem(LOCAL_DECISIONS_KEY);
         window.localStorage.removeItem(LOCAL_RULES_KEY);
+        window.localStorage.removeItem(LOCAL_HOLDINGS_KEY);
       }
     };
     const frame = window.requestAnimationFrame(loadSavedState);
@@ -859,11 +936,12 @@ export default function Home() {
   }, []);
   const goDecision = () => setView("decision");
   const showNotice = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 3200); };
-  const selectResearchStock = (target: Stock) => { setStock(target); setAction((holdingValues[target.code] ?? 0) > 0 ? "补仓" : "买入"); };
+  const selectResearchStock = (target: Stock) => { setStock(target); setAction(holdingValueFor(holdings, target.code) > 0 ? "补仓" : "买入"); };
   const openResearch = (target?: Stock) => { if (target) selectResearchStock(target); setView("research"); };
-  const startNewDecision = () => { setStock(stocks[0]); setAction("补仓"); setView("newDecision"); };
+  const startNewDecision = () => { setStock(stocks[0]); setAction(holdingValueFor(holdings, stocks[0].code) > 0 ? "补仓" : "买入"); setView("newDecision"); };
   const finishDecision = (result: DecisionResult) => { setLatestDecision(result); window.localStorage.setItem(LOCAL_DECISION_KEY, JSON.stringify(result)); setDecisionRecords((current) => { const next = [result, ...current].slice(0, 20); window.localStorage.setItem(LOCAL_DECISIONS_KEY, JSON.stringify(next)); return next; }); showNotice(result.message); setView("desk"); };
   const saveRules = (nextRules: UserRules) => { setRules(nextRules); window.localStorage.setItem(LOCAL_RULES_KEY, JSON.stringify(nextRules)); showNotice("个人提醒规则已更新"); setView("desk"); };
+  const saveHoldings = (nextHoldings: HoldingBook) => { setHoldings(nextHoldings); window.localStorage.setItem(LOCAL_HOLDINGS_KEY, JSON.stringify(nextHoldings)); };
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">跳到主要内容</a>
@@ -871,11 +949,12 @@ export default function Home() {
       <div className="app-body">
         <AppHeader view={view} onNewDecision={startNewDecision} onSelectStock={openResearch} onNotice={showNotice} />
         {notice && <div className="toast-notice" role="status"><CheckCircle2 />{notice}<button onClick={() => setNotice("")} aria-label="关闭提示"><X /></button></div>}
-        {view === "desk" && <DeskView onDecision={goDecision} onResearch={openResearch} onHistory={() => setView("history")} latest={latestDecision} />}
-        {view === "research" && <ResearchView stock={stock} setStock={selectResearchStock} action={action} setAction={setAction} onDecision={goDecision} />}
-        {view === "newDecision" && <StartDecisionView stock={stock} onSelect={selectResearchStock} action={action} setAction={setAction} onResearch={() => setView("research")} onContinue={goDecision} />}
-        {view === "decision" && <DecisionView stock={stock} action={action} rules={rules} onEditRules={() => setView("rules")} onDone={finishDecision} onBack={() => setView("research")} />}
+        {view === "desk" && <DeskView onDecision={goDecision} onResearch={openResearch} onHistory={() => setView("history")} latest={latestDecision} holdings={holdings} capital={rules.investableCapital} />}
+        {view === "research" && <ResearchView stock={stock} setStock={selectResearchStock} action={action} setAction={setAction} onDecision={goDecision} holdings={holdings} capital={rules.investableCapital} />}
+        {view === "newDecision" && <StartDecisionView stock={stock} onSelect={selectResearchStock} action={action} setAction={setAction} onResearch={() => setView("research")} onContinue={goDecision} holdings={holdings} capital={rules.investableCapital} />}
+        {view === "decision" && <DecisionView stock={stock} action={action} rules={rules} holdings={holdings} onEditRules={() => setView("rules")} onDone={finishDecision} onBack={() => setView("research")} />}
         {view === "history" && <HistoryView records={decisionRecords} />}
+        {view === "portfolio" && <HoldingsView holdings={holdings} capital={rules.investableCapital} onChange={saveHoldings} onNotice={showNotice} />}
         {view === "rules" && <RulesView rules={rules} onSave={saveRules} onBack={() => setView("desk")} />}
       </div>
     </div>

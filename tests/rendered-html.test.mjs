@@ -47,9 +47,13 @@ test("keeps the daily workflow and decision loop in the product source", async (
   assert.match(page, /判断失效条件/);
   assert.match(page, /下次复核/);
   assert.match(page, /开始.*审查/);
-  assert.match(page, /holdingValues/);
+  assert.match(page, /HoldingBook/);
+  assert.match(page, /LOCAL_HOLDINGS_KEY/);
+  assert.match(page, /安心看股-持仓备份\.csv/);
+  assert.match(page, /parseHoldingCsv/);
   assert.match(page, /尚无持仓/);
   assert.match(page, /本次计划将新建仓位/);
+  assert.match(page, /任何新增金额都无法使计划后仓位回到边界内/);
   assert.match(page, /研究页优先读取真实行情/);
   assert.match(page, /实时行情与历史价格已载入/);
   assert.match(page, /followedStocks\[stock\.code\] === true/);
