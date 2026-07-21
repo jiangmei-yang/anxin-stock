@@ -1,11 +1,13 @@
-import { ToolFrame } from "@/app/components/tool-frame";
+import { ETFWorkspace } from "@/app/components/etf-workspace";
+import { ProductToolShell } from "@/app/components/product-tool-shell";
 
 export default function ETFToolPage() {
   return (
-    <ToolFrame
+    <ProductToolShell
+      active="etf"
       title="ETF 持仓诊断"
-      description="穿透公开持仓，识别多只 ETF 之间的重复股票、主题集中和数据边界。"
-      path="/etf-tool"
-    />
+      description="穿透定期披露持仓，识别重复股票与主题暴露。"
+      status="持仓披露不是实时数据"
+    ><ETFWorkspace /></ProductToolShell>
   );
 }

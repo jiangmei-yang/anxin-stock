@@ -1,11 +1,13 @@
-import { ToolFrame } from "@/app/components/tool-frame";
+import { ProductToolShell } from "@/app/components/product-tool-shell";
+import { TradeReviewWorkspace } from "@/app/components/trade-review-workspace";
 
 export default function TradeToolPage() {
   return (
-    <ToolFrame
+    <ProductToolShell
+      active="trade"
       title="持仓交易复盘"
-      description="导入 CSV，按 FIFO 还原买卖、费用、未平仓数量与需要复核的交易行为。"
-      path="/trade-tool"
-    />
+      description="按 FIFO 还原买卖、费用、未平仓数量和行为规则。"
+      status="仅按导入记录计算"
+    ><TradeReviewWorkspace /></ProductToolShell>
   );
 }
