@@ -155,6 +155,13 @@ class Database:
                 (user_choice, revised_amount, json.dumps(revised_review, ensure_ascii=False) if revised_review else None, int(row_id)),
             )
 
+    def update_decision_review_snapshot(self, row_id: int, review: dict):
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE decision_reviews SET review_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (json.dumps(review, ensure_ascii=False), int(row_id)),
+            )
+
     def list_decision_reviews(self):
         with self.connect() as conn:
             rows = conn.execute("SELECT * FROM decision_reviews ORDER BY id DESC").fetchall()

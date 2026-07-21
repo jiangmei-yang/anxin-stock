@@ -53,6 +53,9 @@ class MarketDataProvider(ABC):
     @abstractmethod
     def get_announcements(self, code: str, start: date | None = None, end: date | None = None) -> DataResult: ...
 
+    @abstractmethod
+    def get_stock_news(self, code: str) -> DataResult: ...
+
 
 PRICE_COLUMNS = ["date", "open", "high", "low", "close", "volume"]
 FINANCIAL_COLUMNS = [
@@ -60,6 +63,7 @@ FINANCIAL_COLUMNS = [
     "roe", "debt_ratio", "operating_cash_flow",
 ]
 ANNOUNCEMENT_COLUMNS = ["date", "title", "category", "url"]
+NEWS_COLUMNS = ["published_at", "title", "summary", "source", "url"]
 
 
 def ensure_price_schema(frame: pd.DataFrame) -> pd.DataFrame:
@@ -93,3 +97,15 @@ def ensure_announcement_schema(frame: pd.DataFrame) -> pd.DataFrame:
     for col in ANNOUNCEMENT_COLUMNS[1:]:
         result[col] = result[col].fillna("").astype(str)
     return result[ANNOUNCEMENT_COLUMNS].dropna(subset=["date"]).sort_values("date", ascending=False).reset_index(drop=True)
+
+
+def ensure_news_schema(frame: pd.DataFrame) -> pd.DataFrame:
+    result = frame.copy() if frame is not None else pd.DataFrame()
+    for col in NEWS_COLUMNS:
+        if col not in result:
+            result[col] = pd.NaT if col == "published_at" else ""
+    result["published_at"] = pd.to_datetime(result["published_at"], errors="coerce")
+    for col in NEWS_COLUMNS[1:]:
+        result[col] = result[col].fillna("").astype(str)
+    result["summary"] = result["summary"].str.replace(r"\s+", " ", regex=True).str.strip().str.slice(0, 240)
+    return result[NEWS_COLUMNS].dropna(subset=["published_at"]).sort_values("published_at", ascending=False).reset_index(drop=True)

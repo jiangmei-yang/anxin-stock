@@ -6,7 +6,7 @@ import time
 
 import pandas as pd
 
-from .base import DataResult, MarketDataProvider, ensure_announcement_schema, ensure_financial_schema, ensure_price_schema, normalize_stock_code
+from .base import DataResult, MarketDataProvider, ensure_announcement_schema, ensure_financial_schema, ensure_news_schema, ensure_price_schema, normalize_stock_code
 
 
 class AkshareProvider(MarketDataProvider):
@@ -117,4 +117,16 @@ class AkshareProvider(MarketDataProvider):
         return DataResult(
             frame, "AKShare（东方财富公告）",
             message=f"已检索 {begin_date} 至 {end_date} 的公告标题；标题检索不能替代阅读公告全文。",
+        )
+
+    def get_stock_news(self, code: str) -> DataResult:
+        code = normalize_stock_code(code)
+        raw = self._retry(self.ak.stock_news_em, symbol=code, _attempts=1)
+        frame = ensure_news_schema(raw.rename(columns={
+            "发布时间": "published_at", "新闻标题": "title", "新闻内容": "summary",
+            "文章来源": "source", "新闻链接": "url",
+        }))
+        return DataResult(
+            frame, "AKShare（东方财富个股新闻）",
+            message="个股新闻来自公开聚合页面；媒体报道不等于公司正式披露，请核对原文和发布时间。",
         )

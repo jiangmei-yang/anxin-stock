@@ -2,14 +2,19 @@ from __future__ import annotations
 
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 from html import escape
+from urllib.parse import urlparse
 
+import pandas as pd
 import streamlit as st
 
 from src.data_providers import DataService
+from src.data_providers.base import DataResult
 from src.decision_review import DecisionReviewService, RiskProfile, TradePlan, build_market_context, parse_trade_request
 from src.decision_review.models import ReasonAnalysis
+from src.services import SafeInformationAnalyzer, build_information_feed, filter_information_items
 from src.ui.common import get_db, init_page, money, secret_value
 from src.ui.i18n import tr
 
@@ -20,6 +25,7 @@ data_service = DataService(use_demo=True if demo else db.get_setting("use_demo",
 profile = RiskProfile() if demo else RiskProfile.model_validate(db.get_risk_profile(RiskProfile().model_dump()))
 prefill = st.session_state.get("decision_prefill", {})
 reviewer = DecisionReviewService(secret_value("OPENAI_API_KEY"), secret_value("OPENAI_MODEL", "gpt-5.4-mini"))
+information_analyzer = SafeInformationAnalyzer(secret_value("OPENAI_API_KEY"), secret_value("OPENAI_MODEL", "gpt-5.4-mini"))
 
 
 def infer_source(reason: str) -> str:
@@ -62,17 +68,38 @@ def market_snapshot(code: str) -> dict:
         return {"available": False, "source": "不可用", "updated_at": "", "is_demo": False, "message": f"市场资料暂时不可用：{exc}", "metrics": {}, "observations": []}
 
 
-def disclosure_evidence(code: str, analysis: ReasonAnalysis) -> list[dict]:
-    if not any(claim.type == "unverified_external_claim" for claim in analysis.claims):
-        return []
+def public_information(plan: TradePlan, analysis: ReasonAnalysis) -> tuple[dict, list[dict]]:
     try:
-        result = data_service.get_announcements(code, date.today() - timedelta(days=180), date.today())
-        return reviewer.verify_disclosures(analysis.claims, result)
+        announcements = data_service.get_announcements(plan.code, date.today() - timedelta(days=180), date.today())
     except Exception as exc:
-        return reviewer.verify_disclosures(
-            analysis.claims,
-            type("UnavailableResult", (), {"data": None, "source": "公告数据源", "is_demo": True, "message": f"公告资料暂时不可用：{exc}"})(),
-        )
+        announcements = DataResult(pd.DataFrame(), "公告数据源", is_demo=False, message=f"公告资料暂时不可用：{exc}")
+    try:
+        news = data_service.get_stock_news(plan.code)
+    except Exception as exc:
+        news = DataResult(pd.DataFrame(), "新闻数据源", is_demo=False, message=f"新闻资料暂时不可用：{exc}")
+    feed = build_information_feed(
+        code=plan.code, name=plan.name, reason=plan.reason,
+        news=news, announcements=announcements,
+    )
+    feed["assessment"] = information_analyzer.analyze(plan.reason, feed).model_dump(mode="json")
+    verified = []
+    if any(claim.type == "unverified_external_claim" for claim in analysis.claims):
+        verified = reviewer.verify_disclosures(analysis.claims, announcements)
+    return feed, verified
+
+
+def safe_external_url(value: str) -> str:
+    url = str(value or "").strip()
+    parsed = urlparse(url)
+    return url if parsed.scheme in {"http", "https"} and parsed.netloc else ""
+
+
+def information_mode_text(feed: dict) -> str:
+    return {
+        "live": "在线公开资料",
+        "mixed": "在线资料与备用资料混合",
+        "demo": "固定演示资料",
+    }.get(feed.get("data_mode"), "公开资料")
 
 
 def metric_text(value, suffix: str = "", signed: bool = False, digits: int = 1) -> str:
@@ -101,9 +128,50 @@ if db.get_risk_profile() is None:
 
 pending_plan = st.session_state.get("pending_plan")
 pending_analysis = st.session_state.get("pending_analysis")
+ambiguous_plan = st.session_state.get("ambiguous_plan")
 default_action = "补仓" if demo else prefill.get("action", "买入")
 
-if not pending_plan:
+if ambiguous_plan and not pending_plan:
+    st.markdown("### 先把想法变成可检查的计划")
+    st.info("你描述了一个行业方向，但还没有明确到一笔具体交易。系统不会替你选股或猜测金额。")
+    st.markdown(
+        '<div class="ambiguity-grid"><div><span>01</span><b>具体标的</b><small>需要6位代码或明确名称</small></div>'
+        '<div><span>02</span><b>计划金额</b><small>用于计算仓位和损失情景</small></div>'
+        '<div><span>03</span><b>失效条件</b><small>什么信息会让你重新考虑</small></div></div>',
+        unsafe_allow_html=True,
+    )
+    with st.form("clarify_plan"):
+        clarify_stock = st.text_input("你正在考虑哪只股票？", placeholder="输入6位代码或明确名称")
+        clarify_amount = st.number_input("计划金额（元）", min_value=100.0, value=float(ambiguous_plan.get("amount", 10_000)), step=1_000.0)
+        clarify_reason = st.text_area("你现在的理由", value=ambiguous_plan.get("reason") or ambiguous_plan.get("request_text", ""))
+        clarify_invalidation = st.text_input("什么情况会让你觉得原判断可能错了？", placeholder="例如：相关公司的订单和利润没有改善")
+        clarify_submit = st.form_submit_button("继续整理", type="primary", width="stretch")
+    if clarify_submit:
+        try:
+            clarified_code, clarified_name = data_service.resolve_stock(clarify_stock)
+            clarified_industry = str(data_service.get_company_profile(clarified_code).data.get("industry", "数据不足"))
+            clarified_reason_text = clarify_reason.strip() or ambiguous_plan.get("request_text", "")
+            clarified_plan = TradePlan(
+                code=clarified_code, name=clarified_name, industry=clarified_industry,
+                action=ambiguous_plan.get("action", "买入"), amount=clarify_amount,
+                reason=clarified_reason_text, source=infer_source(clarified_reason_text),
+                invalidation=clarify_invalidation, state=infer_state(clarified_reason_text),
+            )
+            clarified_analysis = reviewer.analyzer.analyze(clarified_plan)
+            st.session_state["pending_plan"] = clarified_plan.model_dump(mode="json")
+            st.session_state["pending_analysis"] = clarified_analysis.model_dump(mode="json")
+            st.session_state["pending_unclear"] = []
+            st.session_state["pending_request_text"] = ambiguous_plan.get("request_text", clarified_reason_text)
+            st.session_state.pop("ambiguous_plan", None)
+            st.rerun()
+        except Exception as exc:
+            st.error(f"还无法确认具体标的：{exc}")
+    st.page_link("pages/1_📊_股票分析.py", label="先去查看具体股票资料", width="stretch")
+    if st.button("返回重新描述", width="stretch"):
+        st.session_state.pop("ambiguous_plan", None)
+        st.rerun()
+
+if not pending_plan and not ambiguous_plan:
     with st.form("natural_plan"):
         st.markdown(f"### {tr('用一句话描述计划', 'Describe the plan in one sentence')}")
         example = "我想补仓宁德时代5万元，因为已经跌了很多，朋友说公司拿到了大订单，应该快反弹了。"
@@ -120,7 +188,14 @@ if not pending_plan:
     if parsed:
       try:
         extracted = parse_trade_request(request_text, default_action=default_action)
-        code, name = data_service.resolve_stock_in_text(request_text)
+        try:
+            code, name = data_service.resolve_stock_in_text(request_text)
+        except ValueError:
+            st.session_state["ambiguous_plan"] = {
+                "request_text": request_text, "reason": extracted.reason,
+                "amount": extracted.amount, "action": extracted.action,
+            }
+            st.rerun()
         industry = str(data_service.get_company_profile(code).data.get("industry", "数据不足"))
         state = infer_state(extracted.reason)
         plan = TradePlan(
@@ -193,8 +268,12 @@ if pending_plan and pending_analysis:
         confirmed_analysis = ReasonAnalysis.model_validate(analysis_data)
         stock_value, industry_value = exposures(confirmed_plan.code, confirmed_plan.industry)
         review = reviewer.review(profile, confirmed_plan, stock_value, industry_value, confirmed_analysis)
-        review["market_context"] = market_snapshot(confirmed_plan.code)
-        verified = disclosure_evidence(confirmed_plan.code, confirmed_analysis)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            market_future = pool.submit(market_snapshot, confirmed_plan.code)
+            information_future = pool.submit(public_information, confirmed_plan, confirmed_analysis)
+            review["market_context"] = market_future.result()
+            information_feed, verified = information_future.result()
+        review["latest_information"] = information_feed
         if verified:
             review["evidence"] = [item for item in review["evidence"] if item["title"] != "当前有限资料没有确认这项说法"] + verified
         review["analysis_focus"] = st.session_state.get("pending_focus", [])
@@ -278,6 +357,53 @@ if review:
     )
 
     context = review.get("market_context", {})
+    information_feed = review.get("latest_information", {})
+
+    st.markdown('<div class="live-info-title"><span>最新公开信息</span><b>检索与交易理由相关的公告和报道</b></div>', unsafe_allow_html=True)
+    info_controls = st.columns([3, 1])
+    range_label = info_controls[0].radio(
+        "信息时间范围", ["24小时", "7天", "30天"], horizontal=True,
+        label_visibility="collapsed", key="information_range",
+    )
+    if info_controls[1].button("刷新", icon="🔄", width="stretch", key="refresh_public_information"):
+        with st.spinner("正在检索最新公开资料…"):
+            refreshed_feed, refreshed_evidence = public_information(
+                TradePlan.model_validate(plan), ReasonAnalysis.model_validate(review["analysis"]),
+            )
+            review["latest_information"] = refreshed_feed
+            if refreshed_evidence:
+                review["evidence"] = [item for item in review["evidence"] if item["title"] != "当前有限资料没有确认这项说法"] + refreshed_evidence
+            st.session_state["active_review"] = review
+            if row_id:
+                db.update_decision_review_snapshot(row_id, review)
+        st.rerun()
+
+    assessment = information_feed.get("assessment", {})
+    analyzer_label = "AI 证据整理" if assessment.get("mode") == "openai" else "规则整理"
+    st.markdown(
+        f'<div class="info-assessment"><div><span>{escape(str(assessment.get("status", "资料尚未检索")))}</span>'
+        f'<b>{escape(str(assessment.get("summary", "点击刷新获取最新公开资料。")))}</b></div>'
+        f'<small>{analyzer_label} · {information_mode_text(information_feed)} · 更新于 {escape(str(information_feed.get("updated_at", "未知")))}</small></div>',
+        unsafe_allow_html=True,
+    )
+    hours = {"24小时": 24, "7天": 24 * 7, "30天": 24 * 30}[range_label]
+    information_items = filter_information_items(information_feed.get("items", []), hours=hours, limit=5)
+    if not information_items:
+        st.info("这个时间范围内暂未检索到匹配资料。可以切换到更长时间或稍后刷新；这不代表相关事件不存在。")
+    for index, item in enumerate(information_items, 1):
+        category_class = {"正式披露": "official", "媒体报道": "media", "市场观点": "opinion"}.get(item.get("category"), "media")
+        item_url = safe_external_url(item.get("url", ""))
+        source_link = f'<a href="{escape(item_url)}" target="_blank" rel="noopener noreferrer">查看原文</a>' if item_url else ""
+        detail = " · ".join(x for x in [str(item.get("published_at", "")).replace("T", " "), str(item.get("source", ""))] if x)
+        st.markdown(
+            f'<article class="info-item"><div class="info-item-top"><span class="info-badge {category_class}">{escape(str(item.get("category", "媒体报道")))}</span>'
+            f'<small>证据 {index}</small></div><h4>{escape(str(item.get("title", "")))}</h4>'
+            f'<p>{escape(str(item.get("summary", "")))}</p><div class="info-relation">{escape(str(item.get("relation", "")))}</div>'
+            f'<footer>{escape(detail)} <span>{source_link}</span></footer></article>',
+            unsafe_allow_html=True,
+        )
+    if information_feed.get("message"):
+        st.caption(information_feed["message"])
 
     with st.expander("查看市场数据和金额情景", expanded=False):
         if context.get("available"):
@@ -302,7 +428,8 @@ if review:
         for item in review["evidence"]:
             icon = "◆" if item["status"] in {"找到相关说明", "找到可能相关披露"} else "◇"
             detail = " · ".join(x for x in [str(item.get("published_at", "")), str(item.get("source", ""))] if x)
-            link = f'<a href="{escape(str(item["url"]))}" target="_blank">查看原文</a>' if item.get("url") else ""
+            item_url = safe_external_url(item.get("url", ""))
+            link = f'<a href="{escape(item_url)}" target="_blank" rel="noopener noreferrer">查看原文</a>' if item_url else ""
             st.markdown(
                 f'<div class="evidence-row"><span>{icon}</span><div><b>{escape(str(item["title"]))}</b>'
                 f'<p>{escape(str(item["excerpt"]))}</p><small>{escape(detail)} {link}</small></div></div>',
@@ -331,6 +458,7 @@ if review:
                 revised_review = reviewer.review(profile, revised_plan, stock_value, industry_value, ReasonAnalysis.model_validate(review["analysis"]))
                 revised_review["market_context"] = review.get("market_context", {})
                 revised_review["evidence"] = review.get("evidence", [])
+                revised_review["latest_information"] = review.get("latest_information", {})
                 revised_review["analysis_focus"] = review.get("analysis_focus", [])
                 if row_id: db.update_decision_review(row_id, "修改计划", revised, revised_review)
                 st.session_state["revised_review"] = revised_review

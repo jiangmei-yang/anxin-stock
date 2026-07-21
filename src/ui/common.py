@@ -260,6 +260,32 @@ def init_page(title: str, icon: str = "📊"):
     .evidence-row b {{font-size:.84rem;color:#29465d}}
     .evidence-row p {{margin:.2rem 0;color:#617c91;font-size:.77rem;line-height:1.55}}
     .evidence-row small {{font-size:.65rem;color:#879baa}}
+    .live-info-title {{display:flex;justify-content:space-between;align-items:end;margin:1.15rem 0 .45rem}}
+    .live-info-title>span {{font-size:1.02rem;font-weight:850;color:#17324b}}
+    .live-info-title>b {{font-size:.67rem;color:#7890a2;font-weight:650}}
+    .info-assessment {{display:flex;justify-content:space-between;gap:1rem;align-items:center;margin:.45rem 0 .7rem;padding:.85rem 1rem;border:1px solid #cfe2f1;border-radius:.9rem;background:linear-gradient(115deg,#edf7ff,#fffaf0)}}
+    .info-assessment span,.info-assessment b {{display:block}}
+    .info-assessment span {{font-size:.72rem;font-weight:850;color:#a6761f;margin-bottom:.2rem}}
+    .info-assessment b {{font-size:.8rem;line-height:1.55;color:#34536b}}
+    .info-assessment small {{flex:0 0 auto;font-size:.62rem;color:#8196a6;text-align:right}}
+    .info-item {{margin:.55rem 0;padding:.9rem 1rem;border:1px solid #d8e7f2;border-radius:.9rem;background:#fff;box-shadow:0 8px 22px rgba(42,89,128,.06)}}
+    .info-item-top {{display:flex;align-items:center;justify-content:space-between}}
+    .info-item-top small {{font-size:.62rem;color:#8a9dab}}
+    .info-badge {{display:inline-flex;padding:.2rem .45rem;border-radius:999px;font-size:.61rem;font-weight:850;letter-spacing:.03em}}
+    .info-badge.official {{background:#fff1c9;color:#8a6115}}
+    .info-badge.media {{background:#e5f3ff;color:#2a77ae}}
+    .info-badge.opinion {{background:#edf1f5;color:#61788b}}
+    .info-item h4 {{font-size:.9rem!important;color:#24445d!important;margin:.5rem 0 .25rem!important}}
+    .info-item p {{margin:0;color:#627d91;font-size:.75rem;line-height:1.55}}
+    .info-relation {{margin-top:.5rem;padding:.45rem .55rem;border-radius:.55rem;background:#f5f9fc;color:#60798d;font-size:.68rem;line-height:1.5}}
+    .info-item footer {{display:flex;justify-content:space-between;gap:.6rem;margin-top:.55rem;color:#8a9dab;font-size:.62rem}}
+    .info-item footer a {{color:#277ebc;text-decoration:none;font-weight:800}}
+    .ambiguity-grid {{display:grid;grid-template-columns:repeat(3,1fr);gap:.65rem;margin:.75rem 0 1rem}}
+    .ambiguity-grid>div {{padding:.8rem .85rem;border:1px solid #d7e6f2;border-radius:.85rem;background:#fff}}
+    .ambiguity-grid span {{display:inline-grid;place-items:center;width:25px;height:25px;border-radius:8px;background:#e4f3ff;color:#2c7eb9;font-size:.62rem;font-weight:850}}
+    .ambiguity-grid b,.ambiguity-grid small {{display:block}}
+    .ambiguity-grid b {{margin:.45rem 0 .12rem;color:#28475f;font-size:.82rem}}
+    .ambiguity-grid small {{color:#7890a2;font-size:.67rem;line-height:1.45}}
     .choice-heading {{display:flex;justify-content:space-between;align-items:end;margin:1.1rem 0 .45rem}}
     .choice-heading>span {{font-size:1.05rem;font-weight:850;color:#17324b}}
     .choice-heading>b {{font-size:.68rem;color:#7d91a1;font-weight:650}}
@@ -395,6 +421,12 @@ def init_page(title: str, icon: str = "📊"):
       .review-two-column {{grid-template-columns:1fr;padding:.8rem}}
       .claim-line {{grid-template-columns:82px 1fr}}
       .choice-heading {{align-items:flex-start;flex-direction:column;gap:.15rem}}
+      .live-info-title {{align-items:flex-start;flex-direction:column;gap:.15rem}}
+      .info-assessment {{align-items:flex-start;flex-direction:column}}
+      .info-assessment small {{text-align:left}}
+      .info-item {{padding:.8rem .85rem}}
+      .info-item footer {{align-items:flex-start;flex-direction:column}}
+      .ambiguity-grid {{grid-template-columns:1fr}}
       .comparison-grid {{grid-template-columns:1.1fr 1fr 1fr;padding:.6rem .7rem}}
       .pending-line {{align-items:flex-start}}
       .pending-line>p {{white-space:normal;line-height:1.45}}

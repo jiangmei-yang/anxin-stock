@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -6,7 +6,7 @@ import pytest
 
 from src.analytics.indicators import add_indicators, calculate_macd, calculate_rsi
 from src.analytics.portfolio import calculate_position
-from src.data_providers.base import DataResult, PRICE_COLUMNS, ensure_announcement_schema, ensure_price_schema, normalize_stock_code
+from src.data_providers.base import DataResult, NEWS_COLUMNS, PRICE_COLUMNS, ensure_announcement_schema, ensure_news_schema, ensure_price_schema, normalize_stock_code
 from src.data_providers.demo import DemoDataProvider
 from src.data_providers.akshare_provider import AkshareProvider
 from src.data_providers.service import DataService
@@ -16,7 +16,8 @@ from src.decision_review.models import Claim
 from src.decision_review.analyzer import RuleReasonAnalyzer
 from src.decision_review.rules import review_rules
 from src.risk_engine import RiskEngine
-from src.services import build_research_cockpit
+from src.services import build_information_feed, build_research_cockpit, filter_information_items
+from src.services.news_intelligence import RuleInformationAnalyzer
 
 
 @pytest.mark.parametrize("raw,expected", [("600519", "600519"), ("SH600519", "600519"), ("000001.SZ", "000001"), ("1", "000001")])
@@ -128,6 +129,74 @@ def test_demo_provider_contract():
     assert provider.get_quote("600519").is_demo
     assert not provider.get_financial_indicators("600519").data.empty
     assert len(provider.get_market_indices().data) == 3
+    assert list(provider.get_stock_news("600519").data.columns) == NEWS_COLUMNS
+    assert provider.get_stock_news("600519").is_demo
+
+
+def test_news_schema_sorts_and_bounds_summary():
+    frame = ensure_news_schema(pd.DataFrame([
+        {"published_at": "2026-07-20 08:00", "title": "较早", "summary": "a" * 300},
+        {"published_at": "2026-07-21 09:00", "title": "较新", "summary": " 正文   有空格 "},
+    ]))
+    assert list(frame.columns) == NEWS_COLUMNS
+    assert frame.iloc[0]["title"] == "较新"
+    assert len(frame.iloc[1]["summary"]) == 240
+
+
+def test_information_feed_labels_sources_deduplicates_and_ranks():
+    now = datetime(2026, 7, 21, 12)
+    announcements = ensure_announcement_schema(pd.DataFrame([{
+        "date": "2026-07-21", "title": "关于签订重大订单的公告", "category": "重大合同", "url": "https://www.cninfo.com.cn/a",
+    }]))
+    news = ensure_news_schema(pd.DataFrame([
+        {"published_at": "2026-07-21 10:00", "title": "公司大订单受到市场关注", "summary": "报道提到订单传闻", "source": "财经媒体", "url": "https://example.com/1"},
+        {"published_at": "2026-07-21 09:00", "title": "公司大订单受到市场关注", "summary": "重复报道", "source": "另一媒体", "url": "https://example.com/2"},
+        {"published_at": "2026-07-20 11:00", "title": "机构解读公司走势", "summary": "市场观点", "source": "机构观点", "url": "https://example.com/3"},
+    ]))
+    feed = build_information_feed(
+        code="300750", name="宁德时代", reason="朋友说公司有大订单",
+        news=DataResult(news, "测试新闻"), announcements=DataResult(announcements, "巨潮资讯"), now=now,
+    )
+    titles = [item["title"] for item in feed["items"]]
+    assert titles.count("公司大订单受到市场关注") == 1
+    assert feed["items"][0]["category"] == "正式披露"
+    assert "订单" in feed["items"][0]["matched_terms"]
+    assert feed["data_mode"] == "live"
+
+
+def test_information_time_filter_and_rule_analysis():
+    now = datetime(2026, 7, 21, 12)
+    items = [
+        {"published_at": "2026-07-21T10:00", "title": "重大订单公告", "category": "正式披露", "matched_terms": ["订单"]},
+        {"published_at": "2026-07-18T10:00", "title": "行业新闻", "category": "媒体报道", "matched_terms": []},
+    ]
+    assert len(filter_information_items(items, 24, now=now)) == 1
+    assert len(filter_information_items(items, 24 * 7, now=now)) == 2
+    assessment = RuleInformationAnalyzer().analyze("朋友说有订单", {"items": items})
+    assert assessment.status == "找到相关正式披露"
+    assert assessment.evidence_indices == [1]
+
+
+def test_information_no_match_does_not_claim_event_is_false():
+    assessment = RuleInformationAnalyzer().analyze("朋友说有大订单", {"items": [{
+        "published_at": "2026-07-21T10:00", "title": "股东大会", "category": "正式披露", "matched_terms": [],
+    }]})
+    assert assessment.status == "未找到直接相关信息"
+    assert "不存在" in assessment.summary and "不是" in assessment.summary
+
+
+def test_stock_name_alone_is_not_evidence_for_specific_claim():
+    now = datetime(2026, 7, 21, 12)
+    news = ensure_news_schema(pd.DataFrame([{
+        "published_at": "2026-07-21 10:00", "title": "贵州茅台今日市场动态", "summary": "普通行情报道",
+        "source": "财经媒体", "url": "https://example.com/market",
+    }]))
+    feed = build_information_feed(
+        code="600519", name="贵州茅台", reason="朋友说公司有大订单",
+        news=DataResult(news, "测试新闻"), announcements=DataResult(pd.DataFrame(), "测试公告"), now=now,
+    )
+    assert feed["items"][0]["matched_terms"] == []
+    assert RuleInformationAnalyzer().analyze("朋友说公司有大订单", feed).status == "未找到直接相关信息"
 
 
 def test_market_context_is_descriptive_and_offline_safe():
@@ -247,6 +316,23 @@ def test_akshare_price_history_prefers_fast_secondary_source():
     assert len(result.data) == 2
 
 
+def test_akshare_stock_news_contract():
+    class FakeAk:
+        @staticmethod
+        def stock_news_em(**kwargs):
+            return pd.DataFrame([{
+                "发布时间": "2026-07-21 09:30:00", "新闻标题": "测试新闻", "新闻内容": "公开报道摘要",
+                "文章来源": "测试媒体", "新闻链接": "https://example.com/news",
+            }])
+
+    provider = AkshareProvider.__new__(AkshareProvider)
+    provider.ak = FakeAk()
+    provider._retry = lambda func, *args, **kwargs: func(*args, **{k: v for k, v in kwargs.items() if k != "_attempts"})
+    result = provider.get_stock_news("600519")
+    assert result.data.iloc[0]["title"] == "测试新闻"
+    assert result.is_demo is False
+
+
 def test_data_service_cache_round_trip(tmp_path):
     service = DataService(use_demo=True)
     service.cache_dir = tmp_path
@@ -345,6 +431,9 @@ def test_decision_review_database_round_trip_and_delete(tmp_path):
     saved = db.list_decision_reviews()[0]
     assert saved["revised_amount"] == 5000
     assert saved["revised_review"]["plan"]["amount"] == 5000
+    review["latest_information"] = {"items": [{"title": "新资料"}]}
+    db.update_decision_review_snapshot(row_id, review)
+    assert db.list_decision_reviews()[0]["review"]["latest_information"]["items"][0]["title"] == "新资料"
     assert "triggered_rules" in db.decision_reviews_csv()
     db.delete_decision_review(row_id)
     assert db.list_decision_reviews() == []

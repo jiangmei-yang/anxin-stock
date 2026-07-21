@@ -164,3 +164,5 @@ class DataService:
 
     @lru_cache(maxsize=128)
     def get_announcements(self, code: str, start: date | None = None, end: date | None = None): return self._call("get_announcements", code, start, end)
+
+    def get_stock_news(self, code: str): return self._call("get_stock_news", code)

@@ -5,7 +5,7 @@ from datetime import date, datetime
 import numpy as np
 import pandas as pd
 
-from .base import DataResult, MarketDataProvider, ensure_announcement_schema, ensure_financial_schema, ensure_price_schema, normalize_stock_code
+from .base import DataResult, MarketDataProvider, ensure_announcement_schema, ensure_financial_schema, ensure_news_schema, ensure_price_schema, normalize_stock_code
 
 
 STOCKS = [
@@ -93,4 +93,18 @@ class DemoDataProvider(MarketDataProvider):
         return DataResult(
             frame.reset_index(drop=True), self.name, is_demo=True,
             message="在线公告不可用，当前仅展示固定演示条目；不能据此确认或否定传闻。",
+        )
+
+    def get_stock_news(self, code: str) -> DataResult:
+        info = self._info(code)
+        now = pd.Timestamp.now().floor("min")
+        frame = ensure_news_schema(pd.DataFrame([
+            {"published_at": now - pd.Timedelta(hours=2), "title": f"{info['name']}回应近期市场关注（演示新闻）", "summary": "公司表示相关信息应以正式公告为准。本条仅用于演示新闻检索和来源分级。", "source": "演示财经", "url": ""},
+            {"published_at": now - pd.Timedelta(hours=18), "title": f"{info['industry']}行业近期价格变化受到关注（演示新闻）", "summary": "行业数据出现变化，但不能直接推出单家公司未来表现。", "source": "演示行业资讯", "url": ""},
+            {"published_at": now - pd.Timedelta(days=3), "title": f"机构解读{info['name']}近期走势（演示观点）", "summary": "分析观点存在不确定性，不属于公司正式披露。", "source": "演示市场观点", "url": ""},
+            {"published_at": now - pd.Timedelta(days=12), "title": f"{info['name']}历史新闻样例（演示新闻）", "summary": "用于验证30天时间筛选。", "source": "演示财经", "url": ""},
+        ]))
+        return DataResult(
+            frame, self.name, is_demo=True,
+            message="在线新闻不可用，当前显示固定演示新闻；所有标题和内容均非真实报道。",
         )
