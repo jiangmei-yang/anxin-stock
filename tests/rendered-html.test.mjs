@@ -117,6 +117,8 @@ test("keeps the daily workflow and decision loop in the product source", async (
   assert.match(stockSearchRoute, /searchapi\.eastmoney\.com/);
   assert.match(informationRoute, /web\.ifzq\.gtimg\.cn/);
   assert.match(evidenceRoute, /np-anotice-stock\.eastmoney\.com/);
+  assert.match(evidenceRoute, /www\.cninfo\.com\.cn/);
+  assert.match(evidenceRoute, /巨潮资讯 · 法定披露平台/);
   assert.match(evidenceRoute, /未找到不等于事实不存在/);
   assert.doesNotMatch(page, /买入建议|卖出建议|收益保证/);
 });
