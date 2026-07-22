@@ -53,9 +53,48 @@ test("serves recent market research quickly and skips unconfigured local service
 test("runs a transparent 20-case rules baseline and keeps model evidence separate", () => {
   const evaluation = read("app/lib/course-evaluation.ts");
   const page = read("app/evaluation/page.tsx");
+  const route = read("app/api/evaluation/model/route.ts");
   assert.equal((evaluation.match(/\["S\d{2}"/g) ?? []).length, 10);
   assert.equal((evaluation.match(/id:"P\d{2}"/g) ?? []).length, 10);
   assert.match(page, /真实模型评测/);
   assert.match(page, /跨用户证据/);
   assert.match(page, /不会用 Mock 冒充模型结果/);
+  assert.equal((evaluation.match(/id:"M\d{2}"/g) ?? []).length, 20);
+  assert.match(route, /providerId!=="mock"/);
+  assert.match(route, /modelEvaluationRuns/);
+  assert.match(evaluation, /rawOutput/);
+  const study = read("app/lib/user-study.ts");
+  const studyRoute = read("app/api/evaluation/user-study/route.ts");
+  assert.match(study, /COUNT\(DISTINCT participant_key\)/);
+  assert.match(study, /SHA-256/);
+  assert.match(studyRoute, /format.*csv/);
+  assert.match(page, /零样本保持为零/);
+});
+
+test("provides a clearly labelled 90-second teaching walkthrough",()=>{
+  const demo=read("app/components/demo-walkthrough.tsx");
+  const page=read("app/demo/page.tsx");
+  assert.match(demo,/教学快照/);
+  assert.match(demo,/不代表当前行情/);
+  assert.match(demo,/不连接券商/);
+  assert.match(demo,/计划后单股占比 35%/);
+  assert.match(page,/90 秒课堂演示/);
+});
+
+test("uses an action-based pricing experiment instead of counting an attitude question as revenue",()=>{
+  const pilot=read("app/lib/pilot-study.ts");
+  const page=read("app/components/pilot-enrollment.tsx");
+  const evaluation=read("app/evaluation/page.tsx");
+  assert.match(pilot,/priceMonthly:19/);
+  assert.match(pilot,/status='joined'/);
+  assert.match(page,/14 天付费测试/);
+  assert.match(page,/不会自动扣费/);
+  assert.match(evaluation,/不把态度题算作收入/);
+});
+
+test("does not label the initial health check as a retrying failure",()=>{
+  const status=read("app/components/system-reliability-center.tsx");
+  assert.match(status,/status\?label\[status\]:"检查中"/);
+  assert.match(status,/正在读取，不代表故障/);
+  assert.doesNotMatch(status,/status=data\?\.status\.status\?\?"retrying"/);
 });

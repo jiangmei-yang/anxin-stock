@@ -37,6 +37,7 @@ export type UserSnapshot = {
   strategyAudit?: unknown;
   aiDefaultProviderId?: string;
   aiTaskRouting?: unknown;
+  modelEvaluationRuns?: unknown;
   savedAt?: string;
 };
 

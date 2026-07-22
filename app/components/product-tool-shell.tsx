@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 type ProductToolShellProps = {
-  active: "etf" | "trade" | "quant" | "agent" | "evaluation";
+  active: "etf" | "trade" | "quant" | "agent" | "evaluation" | "demo" | "pilot";
   title: string;
   description: string;
   status: string;

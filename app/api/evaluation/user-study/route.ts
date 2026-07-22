@@ -1,0 +1,5 @@
+import {NextResponse} from "next/server";
+import {exportCurrentUserStudyCsv,readUserStudySummary,saveUserStudyEvent} from "@/app/lib/user-study";
+
+export async function GET(request:Request){try{const url=new URL(request.url);if(url.searchParams.get("format")==="csv")return new Response(await exportCurrentUserStudyCsv(),{headers:{"content-type":"text/csv;charset=utf-8","content-disposition":"attachment; filename=anxin-user-study.csv"}});return NextResponse.json({status:"ready",summary:await readUserStudySummary(),scope:"仅汇总真实提交；不包含模拟用户。"});}catch(error){return NextResponse.json({status:"unavailable",message:error instanceof Error?error.message:"用户研究数据暂不可用"},{status:503});}}
+export async function POST(request:Request){try{const body=await request.json() as Parameters<typeof saveUserStudyEvent>[0];if(!body.reviewId||!body.testerCode)return NextResponse.json({message:"缺少匿名编号或审查记录"},{status:422});return NextResponse.json(await saveUserStudyEvent(body));}catch(error){return NextResponse.json({status:"failed",message:error instanceof Error?error.message:"匿名反馈保存失败"},{status:503});}}

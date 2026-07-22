@@ -82,6 +82,41 @@ test("server-renders privacy-preserving AI model settings", async () => {
   assert.doesNotMatch(html, /sk-[a-zA-Z0-9]/);
 });
 
+test("server-renders an honest evaluation center and reproducible classroom demo", async () => {
+  const evaluationResponse = await render("/evaluation");
+  assert.equal(evaluationResponse.status, 200);
+  const evaluationHtml = await evaluationResponse.text();
+  const demoResponse = await render("/demo");
+  assert.equal(demoResponse.status, 200);
+  const demoHtml = await demoResponse.text();
+  assert.match(evaluationHtml, /20 项基线通过/);
+  assert.match(evaluationHtml, /真实模型评测/);
+  assert.match(evaluationHtml, /跨用户证据/);
+  assert.match(evaluationHtml, /位匿名参与者/);
+  assert.match(evaluationHtml, /打开 90 秒演示/);
+  assert.match(demoHtml, /教学快照/);
+  assert.match(demoHtml, /准备补仓 ¥50,000/);
+  assert.match(demoHtml, /不会执行交易/);
+});
+
+test("blocks model evaluation when only rule mode is available", async () => {
+  const response = await render("/api/evaluation/model", { method: "POST", headers: { accept: "application/json" } });
+  assert.equal(response.status, 409);
+  const body = await response.json();
+  assert.equal(body.status, "blocked");
+  assert.match(body.message, /规则模式不能生成模型评测分数/);
+});
+
+test("server-renders one measurable pricing hypothesis without a payment claim", async () => {
+  const response = await render("/pilot");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /每周持仓判断复核/);
+  assert.match(html, /¥19/);
+  assert.match(html, /加入 14 天付费测试/);
+  assert.match(html, /候补不会扣费/);
+});
+
 test("keeps AI keys server-only and applies per-user provider priority", async () => {
   const [catalog, snapshot, settings, discoveryRoute] = await Promise.all([
     readFile(new URL("../app/lib/ai-provider-catalog.ts", import.meta.url), "utf8"),
