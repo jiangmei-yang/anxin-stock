@@ -59,6 +59,22 @@ test("server-renders privacy-preserving AI model settings", async () => {
   assert.doesNotMatch(html, /sk-[a-zA-Z0-9]/);
 });
 
+test("keeps AI keys server-only and applies per-user provider priority", async () => {
+  const [catalog, snapshot, settings] = await Promise.all([
+    readFile(new URL("../app/lib/ai-provider-catalog.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/user-snapshot.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/personal-workbench.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(catalog, /providerId:"hkgai_main"/);
+  assert.match(catalog, /snapshot\.aiDefaultProviderId/);
+  assert.match(catalog, /isPlatformDefault && item\.connectionStatus === "available"/);
+  assert.match(catalog, /providerId === "mock"/);
+  assert.match(catalog, /function toPublicProvider/);
+  assert.doesNotMatch(catalog.match(/function toPublicProvider[\s\S]*?\n}/)?.[0] ?? "", /baseUrl|providerKey|API_KEY/);
+  assert.match(snapshot, /aiDefaultProviderId\?: string/);
+  assert.match(settings, /个人选择 → 平台默认 HKGAI → Mock \/ 本地规则模式/);
+});
+
 test("mounts one global AI assistant across every product route", async () => {
   const routes = ["/", "/workspace", "/opportunity", "/portfolio", "/analysis", "/quant", "/etf-tool", "/trade-tool", "/ai-settings"];
   for (const path of routes) {

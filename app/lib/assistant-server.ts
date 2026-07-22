@@ -6,6 +6,7 @@ import {
   type Workspace,
 } from "./personal-workbench";
 import { isConfigurationRequest, pageContextFor, toCommandPreview } from "./global-assistant";
+import { providerKey, providersForSnapshot, type AIProviderProfile } from "./ai-provider-catalog";
 
 type StoredCommand = {
   commandId: string;
@@ -20,7 +21,9 @@ type StoredCommand = {
 };
 
 type AssistantSnapshot = UserSnapshot & {
-  aiProviders?: Array<{ providerId: string; displayName: string; baseUrl?: string; model?: string; enabled: boolean; isDefault: boolean; secretStatus: "not_required" | "server_configured" | "missing" }>;
+  aiProviders?: AIProviderProfile[];
+  aiDefaultProviderId?: string;
+  aiTaskRouting?: Record<string, string>;
   workspaces?: Workspace[];
   activeWorkspaceId?: string;
   workspaceVersions?: Array<{ configId: string; workspace: Workspace; createdAt: string }>;
@@ -45,15 +48,15 @@ async function snapshotOrDefault() {
 }
 
 function selectedModel(snapshot: AssistantSnapshot, requested?: string) {
-  const providers = snapshot.aiProviders ?? [];
+  const providers = providersForSnapshot(snapshot);
   const selected = providers.find((item) => item.providerId === requested && item.enabled && item.secretStatus !== "missing")
     ?? providers.find((item) => item.isDefault && item.enabled && item.secretStatus !== "missing");
   return selected?.providerId ?? "mock";
 }
 
 async function configuredModelExplanation(snapshot: AssistantSnapshot, providerId: string, pageLabel: string, message: string) {
-  if (providerId === "mock" || !process.env.OPENAI_API_KEY) return null;
-  const provider = snapshot.aiProviders?.find((item) => item.providerId === providerId);
+  if (providerId === "mock") return null;
+  const provider = providersForSnapshot(snapshot).find((item) => item.providerId === providerId);
   if (!provider || provider.secretStatus === "missing" || !provider.enabled) return null;
   const baseUrl = (provider.baseUrl || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
   const model = provider.model || process.env.AI_MODEL || "gpt-4.1-mini";
@@ -63,7 +66,7 @@ async function configuredModelExplanation(snapshot: AssistantSnapshot, providerI
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       signal: controller.signal,
-      headers: { "content-type": "application/json", authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      headers: { "content-type": "application/json", authorization: `Bearer ${providerKey(providerId)}` },
       body: JSON.stringify({
         model,
         temperature: 0.2,
@@ -231,7 +234,7 @@ export async function undoAssistantWorkspace(workspaceId?: string) {
 
 export async function assistantSessionSummary() {
   const { snapshot, activeWorkspace } = await snapshotOrDefault();
-  const providers = snapshot.aiProviders ?? [{ providerId: "mock", displayName: "本地规则模式", enabled: true, isDefault: true, secretStatus: "not_required" as const }];
+  const providers = providersForSnapshot(snapshot);
   return {
     session_id: `session_${crypto.randomUUID()}`,
     workspace_id: activeWorkspace.id,
