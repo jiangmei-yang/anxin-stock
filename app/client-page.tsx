@@ -415,7 +415,7 @@ function RecentTable({ onHistory, records }: { onHistory?: () => void; records: 
       <SectionHeader title="最近决策" meta="保留原计划与最终选择" action={onHistory && <Button variant="ghost" size="sm" onClick={onHistory}>全部记录<ChevronRight data-icon="inline-end" /></Button>} />
       <Table>
         <TableHeader><TableRow><TableHead>时间</TableHead><TableHead>股票</TableHead><TableHead>操作</TableHead><TableHead className="numeric">原计划</TableHead><TableHead className="numeric">最终选择</TableHead><TableHead>结果</TableHead></TableRow></TableHeader>
-        <TableBody>{rows.slice(0, onHistory ? 3 : 4).map((row) => <TableRow key={row.time + row.stock}><TableCell className="muted-cell">{row.time}</TableCell><TableCell><strong>{row.stock}</strong></TableCell><TableCell>{row.action}</TableCell><TableCell className="numeric">{row.before}</TableCell><TableCell className="numeric">{row.after}</TableCell><TableCell><Badge variant="outline">{row.result}</Badge></TableCell></TableRow>)}</TableBody>
+        <TableBody>{rows.slice(0, onHistory ? 3 : 4).map((row, index) => <TableRow key={`${row.time}-${row.stock}-${index}`}><TableCell className="muted-cell">{row.time}</TableCell><TableCell><strong>{row.stock}</strong></TableCell><TableCell>{row.action}</TableCell><TableCell className="numeric">{row.before}</TableCell><TableCell className="numeric">{row.after}</TableCell><TableCell><Badge variant="outline">{row.result}</Badge></TableCell></TableRow>)}</TableBody>
       </Table>
       {rows.length === 0 && <div className="table-empty"><History /><strong>还没有决策记录</strong><span>完成第一次交易前审查后，原计划与最终选择会出现在这里。</span></div>}
     </section>
