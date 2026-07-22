@@ -27,7 +27,7 @@ function withEvidenceReliability(payload:Record<string,unknown>,sourceName:strin
 
 async function publicAnnouncementEvidence(code: string, reason: string) {
   const url = `https://np-anotice-stock.eastmoney.com/api/security/ann?sr=-1&page_size=10&page_index=1&ann_type=A&client_source=web&stock_list=${code}`;
-  const payload = await requestJson(url, 12_000) as { data?: { list?: PublicAnnouncement[] } };
+  const payload = await requestJson(url, 6_000) as { data?: { list?: PublicAnnouncement[] } };
   const rows = payload.data?.list ?? [];
   const claimTerms = CLAIM_TERMS.filter((term) => reason.includes(term));
   const items = rows.slice(0, 10).map((item) => {
@@ -82,7 +82,7 @@ async function publicAnnouncementEvidence(code: string, reason: string) {
 }
 
 async function cninfoAnnouncementEvidence(code: string, reason: string) {
-  const securities = await requestJson("https://www.cninfo.com.cn/new/data/szse_stock.json", 12_000, {
+  const securities = await requestJson("https://www.cninfo.com.cn/new/data/szse_stock.json", 8_000, {
     referer: "https://www.cninfo.com.cn/",
     "user-agent": "Mozilla/5.0 (compatible; AnxinDecisionDesk/1.0)",
   }) as { stockList?: CninfoSecurity[] };
@@ -109,7 +109,7 @@ async function cninfoAnnouncementEvidence(code: string, reason: string) {
     isHLtitle: "true",
   });
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
+  const timeout = setTimeout(() => controller.abort(), 8_000);
   try {
     const response = await fetch("https://www.cninfo.com.cn/new/hisAnnouncement/query", {
       method: "POST",
@@ -207,22 +207,35 @@ export async function GET(
       { status: 400 },
     );
   }
-  const cacheKey = `evidence:${code}:${reason.toLowerCase()}`;
+  const relevantTerms = CLAIM_TERMS.filter((term) => reason.includes(term)).sort();
+  const cacheKey = `evidence:${code}:${relevantTerms.join("|") || "general"}`;
+  const recent = readCached<Record<string, unknown>>(cacheKey, 5 * 60 * 1000);
+  if (recent) {
+    return NextResponse.json({
+      ...recent.value,
+      cache_hit: true,
+      cached_at: recent.cachedAt,
+      feed: { ...((recent.value.feed as Record<string, unknown> | undefined) ?? {}), data_mode: "cached", cached_at: recent.cachedAt, message: "使用最近 5 分钟内成功取得的公开资料。" },
+    }, { headers: { "cache-control": "public, max-age=60, stale-while-revalidate=300", "server-timing": "evidence;desc=recent-cache" } });
+  }
 
   const baseUrl = (process.env.ANXIN_API_URL || DEFAULT_ANXIN_API_URL).replace(/\/$/, "");
   const url = `${baseUrl}/stocks/${code}/evidence?limit=10&reason=${encodeURIComponent(reason)}`;
   try {
-    if (!process.env.ANXIN_API_URL && process.env.NODE_ENV === "production") throw new Error("FastAPI not configured");
+    if (!process.env.ANXIN_API_URL) throw new Error("FastAPI not configured");
     const payload = withEvidenceReliability(await requestJson(url, 45_000) as Record<string,unknown>,"安心看股资料服务");
     storeCached(cacheKey, payload);
     return NextResponse.json(payload);
   } catch (error) {
     try {
-      const payload = withEvidenceReliability(await cninfoAnnouncementEvidence(code, reason),"巨潮资讯 · 法定披露平台","安心看股资料服务"); storeCached(cacheKey, payload); return NextResponse.json(payload, { headers: { "cache-control": "public, max-age=300, stale-while-revalidate=3600" } });
+      const result = await Promise.any([
+        cninfoAnnouncementEvidence(code, reason).then((payload) => ({ payload, source: "巨潮资讯 · 法定披露平台", fallback: "安心看股资料服务" })),
+        publicAnnouncementEvidence(code, reason).then((payload) => ({ payload, source: "东方财富公告聚合", fallback: "巨潮资讯" })),
+      ]);
+      const payload = withEvidenceReliability(result.payload, result.source, result.fallback);
+      storeCached(cacheKey, payload);
+      return NextResponse.json(payload, { headers: { "cache-control": "public, max-age=300, stale-while-revalidate=3600", "server-timing": `evidence;desc=${result.source.includes("巨潮") ? "cninfo" : "eastmoney"}` } });
     } catch {
-      try {
-        const payload = withEvidenceReliability(await publicAnnouncementEvidence(code, reason),"东方财富公告聚合","巨潮资讯"); storeCached(cacheKey, payload); return NextResponse.json(payload, { headers: { "cache-control": "public, max-age=300, stale-while-revalidate=3600" } });
-      } catch {
         const cached = readCached<Record<string, unknown>>(cacheKey, 24 * 60 * 60 * 1000);
         if (cached) return NextResponse.json({ ...cached.value, freshness_status:"stale",feed: { ...((cached.value.feed as Record<string, unknown> | undefined) ?? {}), data_mode: "cached", cached_at: cached.cachedAt, message: "公开资料源暂不可用，当前显示最近一次成功检索结果。" },reliability:reliability({status:"stale",last_success_at:cached.cachedAt,data_timestamp:String(cached.value.updated_at??cached.cachedAt),error_code:"EVIDENCE_SOURCE_FAILED",message:"缓存资料不能支持新的实时结论",retryable:true,fallback_used:"内存缓存",allow_signal:false}) });
         return NextResponse.json(
@@ -234,7 +247,6 @@ export async function GET(
           },
           { status: 503 },
         );
-      }
     }
   }
 }

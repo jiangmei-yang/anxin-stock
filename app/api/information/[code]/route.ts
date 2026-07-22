@@ -155,6 +155,13 @@ export async function GET(
     );
   }
   const cacheKey = `information:${code}:v2`;
+  const recent = readCached<Record<string, unknown>>(cacheKey, 5 * 60 * 1000);
+  if (recent) {
+    return NextResponse.json(
+      { ...recent.value, cache_hit: true, cached_at: recent.cachedAt, cache_age_seconds: recent.ageSeconds },
+      { headers: { "cache-control": "public, max-age=30, stale-while-revalidate=300", "server-timing": "cache;desc=hit" } },
+    );
+  }
 
   const baseUrl = (process.env.DAILY_STOCK_ANALYSIS_URL || DEFAULT_DSA_URL).replace(/\/$/, "");
   const dataBaseUrl = (process.env.ANXIN_API_URL || "http://127.0.0.1:8001").replace(/\/$/, "");
@@ -164,15 +171,14 @@ export async function GET(
   const validationUrl = `${dataBaseUrl}/stocks/search?q=${encodeURIComponent(code)}&limit=5`;
   const publicHistoryUrl = `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${marketPrefix(code)}${code},day,,,260,qfq`;
   const eastmoneyHistoryUrl = `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${eastmoneySecid(code)}&klt=101&fqt=1&lmt=260&end=20500101&iscca=1&fields1=f1,f2,f3,f4,f5,f6,f7,f8&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61`;
-  const useLocalDefaults = process.env.NODE_ENV !== "production";
   const ifindConfigured = Boolean(process.env.IFIND_ACCESS_TOKEN || process.env.IFIND_REFRESH_TOKEN);
   const [validationResult, quoteResult, historyResult, fallbackHistoryResult, publicHistoryResult, eastmoneyHistoryResult, ifindHistoryResult] = await Promise.allSettled([
-    process.env.ANXIN_API_URL || useLocalDefaults ? requestJson(validationUrl, 4_000) : Promise.reject(new Error("FastAPI not configured")),
-    process.env.DAILY_STOCK_ANALYSIS_URL || useLocalDefaults ? requestJson(quoteUrl, 4_000) : Promise.reject(new Error("daily_stock_analysis not configured")),
-    process.env.DAILY_STOCK_ANALYSIS_URL || useLocalDefaults ? requestJson(historyUrl, 6_000) : Promise.reject(new Error("daily_stock_analysis not configured")),
-    process.env.ANXIN_API_URL || useLocalDefaults ? requestJson(fallbackHistoryUrl, 12_000) : Promise.reject(new Error("FastAPI not configured")),
-    requestJson(publicHistoryUrl, 10_000),
-    requestJson(eastmoneyHistoryUrl, 10_000),
+    process.env.ANXIN_API_URL ? requestJson(validationUrl, 4_000) : Promise.reject(new Error("FastAPI not configured")),
+    process.env.DAILY_STOCK_ANALYSIS_URL ? requestJson(quoteUrl, 4_000) : Promise.reject(new Error("daily_stock_analysis not configured")),
+    process.env.DAILY_STOCK_ANALYSIS_URL ? requestJson(historyUrl, 6_000) : Promise.reject(new Error("daily_stock_analysis not configured")),
+    process.env.ANXIN_API_URL ? requestJson(fallbackHistoryUrl, 8_000) : Promise.reject(new Error("FastAPI not configured")),
+    requestJson(publicHistoryUrl, 5_000),
+    requestJson(eastmoneyHistoryUrl, 5_000),
     ifindConfigured ? requestIfindHistory(code) : Promise.reject(new Error("iFinD 未配置授权 Token")),
   ]);
 
@@ -239,7 +245,7 @@ export async function GET(
     provider: (result.history as { source?: string } | undefined)?.source || (quoteResult.status === "fulfilled" ? "daily_stock_analysis · 公开行情" : "公开行情备用源"),
     fetchedAt: new Date().toISOString(),
     sources: [
-      { id: "daily_stock_analysis", name: "daily_stock_analysis", status: historyResult.status === "fulfilled" && Boolean(normalizeHistory(historyResult.value)) ? "healthy" : "unavailable", detail: process.env.DAILY_STOCK_ANALYSIS_URL || useLocalDefaults ? "自托管分析底座" : "未配置服务地址" },
+      { id: "daily_stock_analysis", name: "daily_stock_analysis", status: historyResult.status === "fulfilled" && Boolean(normalizeHistory(historyResult.value)) ? "healthy" : "unavailable", detail: process.env.DAILY_STOCK_ANALYSIS_URL ? "自托管分析底座" : "未配置服务地址" },
       { id: "ifind", name: "同花顺 iFinD", status: !ifindConfigured ? "blocked" : ifindHistoryResult.status === "fulfilled" && Boolean(normalizeIfindHistory(ifindHistoryResult.value)) ? "healthy" : "unavailable", detail: !ifindConfigured ? "需 iFinD 账号授权，Token 仅保存在服务器" : "官方 HTTP 数据接口" },
       { id: "tencent", name: "腾讯证券公开行情", status: publicHistoryResult.status === "fulfilled" && Boolean(normalizeTencentHistory(publicHistoryResult.value, code)) ? "healthy" : "unavailable", detail: "公开日线备用源" },
       { id: "eastmoney", name: "东方财富公开行情", status: eastmoneyHistoryResult.status === "fulfilled" && Boolean(normalizeEastmoneyHistory(eastmoneyHistoryResult.value)) ? "healthy" : "unavailable", detail: "公开日线备用源；非 Choice 商用数据授权" },

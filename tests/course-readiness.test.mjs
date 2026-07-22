@@ -28,4 +28,34 @@ test("opens stock research on the evidence summary instead of an empty chart", (
   assert.match(research, /useState<"概览" \| "财报体检"[\s\S]*?>\("概览"\)/);
   assert.match(research, /setPanel\("概览"\)/);
   assert.match(research, /submittedQuery\.trim\(\) \|\| "检查近期正式披露"/);
+  assert.match(research, /aria-label="返回安心看股工作台"/);
+  assert.match(research, /label: "研究概览"/);
+  assert.match(research, /href: "\/quant", label: "量化研究"/);
+});
+
+test("does not wait for an unconfigured local evidence backend", () => {
+  const route = read("app/api/evidence/[code]/route.ts");
+  assert.match(route, /if \(!process\.env\.ANXIN_API_URL\) throw new Error/);
+  assert.match(route, /Promise\.any/);
+  assert.match(route, /recent-cache/);
+});
+
+test("serves recent market research quickly and skips unconfigured local services", () => {
+  const route = read("app/api/information/[code]/route.ts");
+  const rules = read("app/lib/personal-workbench.ts");
+  assert.match(route, /readCached<Record<string, unknown>>\(cacheKey, 5 \* 60 \* 1000\)/);
+  assert.match(route, /process\.env\.DAILY_STOCK_ANALYSIS_URL \? requestJson/);
+  assert.match(route, /process\.env\.ANXIN_API_URL \? requestJson/);
+  assert.doesNotMatch(route, /useLocalDefaults/);
+  assert.match(rules, /"最后机会"/);
+});
+
+test("runs a transparent 20-case rules baseline and keeps model evidence separate", () => {
+  const evaluation = read("app/lib/course-evaluation.ts");
+  const page = read("app/evaluation/page.tsx");
+  assert.equal((evaluation.match(/\["S\d{2}"/g) ?? []).length, 10);
+  assert.equal((evaluation.match(/id:"P\d{2}"/g) ?? []).length, 10);
+  assert.match(page, /真实模型评测/);
+  assert.match(page, /跨用户证据/);
+  assert.match(page, /不会用 Mock 冒充模型结果/);
 });

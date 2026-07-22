@@ -23,6 +23,7 @@ import {
   FileChartColumn,
   Gauge,
   History,
+  Home as HomeIcon,
   LayoutDashboard,
   Layers3,
   LockKeyhole,
@@ -193,7 +194,7 @@ type HeaderFreshness = { state: "checking" | "ready" | "partial"; quote: string;
 const LOADING_SOURCE_CHECKS: SourceCheck[] = ["行情", "公告", "财报"].map((category) => ({ category, source: "正在连接", status: "loading", updatedAt: "—", detail: "检查公开数据源" }));
 
 const navItems = [
-  { id: "desk" as const, label: "工作台", icon: LayoutDashboard },
+  { id: "desk" as const, label: "研究概览", icon: LayoutDashboard },
   { id: "research" as const, label: "股票研究", icon: FileSearch },
   { id: "decision" as const, label: "决策验证", icon: ShieldCheck },
   { id: "portfolio" as const, label: "我的持仓", icon: BriefcaseBusiness },
@@ -204,7 +205,7 @@ const navItems = [
 
 const toolNavItems = [
   { href: "/agent", label: "任务助手", icon: Bot },
-  { href: "/quant", label: "量化规则", icon: ScanSearch },
+  { href: "/quant", label: "量化研究", icon: ScanSearch },
   { href: "/etf-tool", label: "ETF 诊断", icon: Layers3 },
   { href: "/trade-tool", label: "交易复盘", icon: ReceiptText },
 ];
@@ -214,7 +215,7 @@ function PriceChange({ value }: { value: number }) {
 }
 
 function Brand() {
-  return <div className="brand" aria-label="安心看股"><span>安</span></div>;
+  return <a className="brand" href="/" aria-label="返回安心看股工作台"><span>安</span></a>;
 }
 
 function AppRail({ view, onView, hasPending }: { view: View; onView: (view: View) => void; hasPending: boolean }) {
@@ -222,6 +223,7 @@ function AppRail({ view, onView, hasPending }: { view: View; onView: (view: View
     <aside className="app-rail">
       <Brand />
       <nav aria-label="主导航">
+        <a className="rail-button" href="/" aria-label="返回工作台"><HomeIcon /><span>工作台</span></a>
         {navItems.map(({ id, label, icon: Icon }) => (
           <button key={id} className={view === id || (id === "decision" && view === "decisionResult") ? "rail-button active" : "rail-button"} onClick={() => onView(id)} aria-label={label} aria-current={view === id || (id === "decision" && view === "decisionResult") ? "page" : undefined}>
             <Icon />
@@ -242,7 +244,7 @@ function AppRail({ view, onView, hasPending }: { view: View; onView: (view: View
 }
 
 function AppHeader({ view, stockCode, freshnessOverride, userName, syncStatus, onNewDecision, onSelectStock, onDataStatus }: { view: View; stockCode: string; freshnessOverride?: { stockCode: string; value: HeaderFreshness }; userName: string; syncStatus: CloudSyncStatus; onNewDecision: () => void; onSelectStock: (stock: Stock) => void; onDataStatus: () => void }) {
-  const titles: Record<View, string> = { desk: "工作台", research: "股票研究", newDecision: "新建决策", decision: "决策验证", decisionResult: "审查记录", history: "历史记录", portfolio: "我的持仓", rules: "我的规则", privacy: "数据和隐私" };
+  const titles: Record<View, string> = { desk: "研究概览", research: "股票研究", newDecision: "新建决策", decision: "决策验证", decisionResult: "审查记录", history: "历史记录", portfolio: "我的持仓", rules: "我的规则", privacy: "数据和隐私" };
   const [query, setQuery] = useState("");
   const [remoteMatches, setRemoteMatches] = useState<StockSearchItem[]>([]);
   const [searching, setSearching] = useState(false);
