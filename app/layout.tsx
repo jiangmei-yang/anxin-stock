@@ -6,6 +6,7 @@ import { SystemReliabilityCenter } from "./components/system-reliability-center"
 import "./globals.css";
 import "./quant-workspace.css";
 import "./failure-control.css";
+import "./product-polish.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();

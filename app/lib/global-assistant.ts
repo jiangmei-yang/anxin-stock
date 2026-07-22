@@ -81,7 +81,7 @@ export const ASSISTANT_SESSION_KEY = "anxin.globalAssistant.v1";
 export const WELCOME_MESSAGE: AssistantMessage = {
   id: "welcome",
   type: "assistant_message",
-  content: "你不需要一开始就知道看什么。告诉我你的目标、时间或困惑，我会先推荐一个工作台；所有变化都要经你确认。",
+  content: "说出你现在要完成的事：核实一条消息、看懂持仓风险，或调整工作台。我会先列出步骤；涉及保存和界面修改时，再请你确认。",
   createdAt: new Date(0).toISOString(),
 };
 
@@ -111,7 +111,7 @@ export function pageContextFor(route: string): AssistantPageContext {
 
 export function createAssistantSession(): AssistantSessionState {
   return {
-    open: true,
+    open: false,
     messages: [WELCOME_MESSAGE],
     draft: "",
     currentWorkspaceId: "default",

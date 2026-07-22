@@ -48,12 +48,10 @@ type AssistantContextValue = {
 const AssistantContext = createContext<AssistantContextValue | null>(null);
 
 const quickActions = [
-  { label: "我是投资新手", prompt: "我是投资新手，不知道该看什么" },
-  { label: "我想先学习", prompt: "我只想先学习，不准备真实交易" },
-  { label: "我已经有持仓", prompt: "我已经有持仓，想先诊断风险" },
-  { label: "我常受社交平台影响", prompt: "我经常被社交平台内容影响" },
-  { label: "我没时间看盘", prompt: "我没时间看盘，帮我安排工作台" },
-  { label: "我想先模拟", prompt: "我想先模拟，不想真实交易" },
+  { label: "核实一条消息", prompt: "我想核实一条刚看到的投资消息" },
+  { label: "检查持仓风险", prompt: "读取我的持仓，先检查集中度和重复暴露" },
+  { label: "解释当前页面", prompt: "用简短的语言说明当前页面最值得先看什么" },
+  { label: "调整工作台", prompt: "根据我目前的资料，整理一个更实用的工作台预览" },
 ];
 
 const nowId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -254,13 +252,13 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
         <div className="global-assistant-content">{children}</div>
         <aside className={state.open ? "global-assistant-panel open" : "global-assistant-panel"} aria-label="安心看股 AI 助手" aria-hidden={!state.open}>
           <header className="assistant-header">
-            <div className="assistant-title"><span><Bot /></span><div><strong>安心看股 AI 助手</strong><small>查资料、算影响、拆说法；不替你交易</small></div></div>
+            <div className="assistant-title"><span><Bot /></span><div><strong>研究助手</strong><small>查资料、算影响、拆分事实与判断</small></div></div>
             <Button variant="ghost" size="icon" onClick={() => setOpen(false)} aria-label="收起 AI 助手"><PanelRightClose /></Button>
           </header>
 
           <section className="assistant-model-bar" aria-label="当前 AI 模型">
             <div><Cpu /><span><small>{privacyMode?"本地隐私模式":"当前模型"}</small><strong>{currentProvider?.displayName ?? "未连接"}</strong></span><Badge variant={currentProvider?.connectionStatus === "available" || currentProvider?.secretStatus === "not_required" ? "secondary" : "outline"}>{currentProvider?.providerId === "mock" ? "AI 未启用" : currentProvider?.connectionStatus === "available" ? (currentProvider.mode==="local"?"本机处理":currentProvider.mode==="platform"?"平台处理":"第三方 API") : "需要配置"}</Badge></div>
-            <Button variant="outline" size="sm" onClick={() => setProviderMenuOpen((open) => !open)}>{currentProvider?.providerId === "mock" ? "接入真实模型" : "切换"}<ChevronDown data-icon="inline-end" /></Button>
+            <Button variant="outline" size="sm" onClick={() => setProviderMenuOpen((open) => !open)}>{currentProvider?.providerId === "mock" ? "模型设置" : "切换"}<ChevronDown data-icon="inline-end" /></Button>
           </section>
 
           {providerMenuOpen && <section className="assistant-provider-menu" aria-label="切换 AI 模型">
@@ -270,7 +268,7 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
 
           <div className="assistant-context-bar">
             <div><span>当前</span><strong>{context.label}</strong></div>
-            <span>{currentProvider?.model || "规则计算"} · {currentProvider?.privacyLabel??"处理位置待核对"}</span>
+            <span>{currentProvider?.providerId === "mock" ? "规则工具可用 · 不生成自由回答" : `${currentProvider?.model || "模型待配置"} · ${currentProvider?.privacyLabel ?? "处理位置待核对"}`}</span>
           </div>
 
           <div className="assistant-messages" role="log" aria-live="polite" aria-label="AI 助手对话记录">
@@ -300,7 +298,7 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
           </form>
         </aside>
 
-        {!state.open && <button className="assistant-reopen" type="button" onClick={() => setOpen(true)} aria-label="打开安心看股 AI 助手"><PanelRightOpen /><span>{state.pendingPreview ? "待确认配置" : state.unreadCount ? `${state.unreadCount} 条新消息` : "AI 助手"}</span>{state.pendingPreview && <i />}</button>}
+        {!state.open && <button className="assistant-reopen" type="button" onClick={() => setOpen(true)} aria-label="打开研究助手"><PanelRightOpen /><span>{state.pendingPreview ? "待确认配置" : state.unreadCount ? `${state.unreadCount} 条新消息` : "研究助手"}</span>{state.pendingPreview && <i />}</button>}
         <button className="assistant-mobile-trigger" type="button" onClick={() => setOpen(true)}><MessageSquareText /><span>{state.pendingPreview ? "待确认配置" : "AI 助手"}</span>{state.pendingPreview && <i />}</button>
         {state.open && <button className="assistant-mobile-backdrop" type="button" onClick={() => setOpen(false)} aria-label="关闭 AI 助手" />}
       </div>

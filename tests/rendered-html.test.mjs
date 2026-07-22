@@ -67,9 +67,9 @@ test("opens the requested stock workbench view and keeps tool navigation explici
   assert.match(analysisPage, /initialView = requestedView/);
   assert.match(clientPage, /useState<View>\(initialView\)/);
   assert.match(toolShell, /\/analysis\?view=research/);
-  assert.match(toolShell, /\/analysis\?view=portfolio/);
-  assert.match(toolShell, /\/analysis\?view=newDecision/);
-  assert.match(toolShell, /\/analysis\?view=history/);
+  assert.match(toolShell, /href: "\/portfolio"/);
+  assert.match(toolShell, /href: "\/quant"/);
+  assert.match(toolShell, /href: "\/ai-settings"/);
 });
 
 test("server-renders privacy-preserving AI model settings", async () => {
@@ -125,7 +125,7 @@ test("exposes real built-in and local model modes without pretending they are in
   assert.match(catalog,/aiPrivacyMode/);
   assert.match(catalog,/不会伪装成生成式 AI/);
   assert.match(settings,/仅使用本机模型/);
-  assert.match(settings,/未安装 \/ 未配置/);
+  assert.match(settings,/生成式 AI 尚未接入/);
   assert.match(settings,/平台内置模型/);
   assert.match(assistant,/取消生成/);
   assert.match(privacyRoute,/setAIPrivacyMode/);
@@ -183,8 +183,8 @@ test("mounts one global AI assistant across every product route", async () => {
     const response = await render(path);
     assert.equal(response.status, 200, path);
     const html = await response.text();
-    assert.match(html, /安心看股 AI 助手/, path);
-    assert.match(html, /查资料、算影响、拆说法；不替你交易/, path);
+    assert.match(html, /研究助手/, path);
+    assert.match(html, /查资料、算影响、拆分事实与判断/, path);
     assert.match(html, /aria-label="AI 助手对话记录"/, path);
   }
 });
@@ -193,10 +193,10 @@ test("server-renders the Goal-to-Workspace Agent desk", async () => {
   const response = await render("/agent");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Agent 工作台/);
+  assert.match(html, /任务助手/);
   assert.match(html, /告诉我你想完成什么/);
   assert.match(html, /生成执行计划/);
-  assert.match(html, /工具白名单已启用/);
+  assert.match(html, /仅使用已授权工具/);
   assert.match(html, /查询和计算可直接执行/);
   assert.match(html, /工作台、规则、提醒和模拟必须确认/);
 });

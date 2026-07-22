@@ -5,12 +5,13 @@ import {
   BriefcaseBusiness,
   Bot,
   FileSearch,
-  History,
   LayoutDashboard,
   Layers3,
+  MessageSquareWarning,
   ScanSearch,
   ReceiptText,
-  ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
 } from "lucide-react";
 
 type ProductToolShellProps = {
@@ -21,15 +22,17 @@ type ProductToolShellProps = {
   children: React.ReactNode;
 };
 
-const navigation: Array<{ href: string; label: string; icon: typeof LayoutDashboard; id?: "trade" | "agent" }> = [
+const navigation: Array<{ href: string; label: string; icon: typeof LayoutDashboard; id?: ProductToolShellProps["active"] }> = [
   { href: "/", label: "工作台", icon: LayoutDashboard },
-  { href: "/agent", label: "Agent", icon: Bot, id: "agent" },
-  { href: "/analysis?view=research", label: "研究", icon: FileSearch },
-  { href: "/analysis?view=portfolio", label: "组合", icon: BriefcaseBusiness },
-  { href: "/quant", label: "量化规则", icon: ScanSearch },
-  { href: "/analysis?view=newDecision", label: "决策审查", icon: ShieldCheck },
+  { href: "/opportunity", label: "机会检查", icon: MessageSquareWarning },
+  { href: "/agent", label: "任务助手", icon: Bot, id: "agent" },
+  { href: "/profile", label: "我的规则", icon: SlidersHorizontal },
+  { href: "/portfolio", label: "我的组合", icon: BriefcaseBusiness },
+  { href: "/analysis?view=research", label: "股票研究", icon: FileSearch },
+  { href: "/etf-tool", label: "ETF 诊断", icon: Layers3, id: "etf" },
+  { href: "/quant", label: "量化研究", icon: ScanSearch, id: "quant" },
   { href: "/trade-tool", label: "交易复盘", icon: ReceiptText, id: "trade" },
-  { href: "/analysis?view=history", label: "历史", icon: History },
+  { href: "/ai-settings", label: "AI 模型", icon: Sparkles },
 ];
 
 export function ProductToolShell({ active, title, description, status, children }: ProductToolShellProps) {
@@ -40,10 +43,9 @@ export function ProductToolShell({ active, title, description, status, children 
         <Link className="native-tool-brand" href="/" aria-label="安心看股工作台"><span>安</span><strong>安心看股</strong></Link>
         <nav aria-label="主导航">
           {navigation.map(({ href, label, icon: Icon, id }) => {
-            const selected = id === active || (active === "quant" && href === "/quant");
+            const selected = id === active;
             return <Link key={label} href={href} className={selected ? "native-tool-nav active" : "native-tool-nav"} aria-current={selected ? "page" : undefined}><Icon /><span>{label}</span></Link>;
           })}
-          <Link href="/etf-tool" className={active === "etf" ? "native-tool-nav active" : "native-tool-nav"} aria-current={active === "etf" ? "page" : undefined}><Layers3 /><span>ETF 穿透</span></Link>
         </nav>
       </aside>
       <header className="native-tool-header">

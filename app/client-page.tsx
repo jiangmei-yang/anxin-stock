@@ -203,7 +203,7 @@ const navItems = [
 ];
 
 const toolNavItems = [
-  { href: "/agent", label: "Agent 工作台", icon: Bot },
+  { href: "/agent", label: "任务助手", icon: Bot },
   { href: "/quant", label: "量化规则", icon: ScanSearch },
   { href: "/etf-tool", label: "ETF 诊断", icon: Layers3 },
   { href: "/trade-tool", label: "交易复盘", icon: ReceiptText },
