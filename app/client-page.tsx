@@ -1392,8 +1392,8 @@ function HistoryView({ records, onStart, onResearch, onRecheck, onRestore }: { r
   );
 }
 
-export default function Home({ authenticatedUser }: { authenticatedUser: string }) {
-  const [view, setView] = useState<View>("desk");
+export default function Home({ authenticatedUser, initialView = "desk" }: { authenticatedUser: string; initialView?: View }) {
+  const [view, setView] = useState<View>(initialView);
   const [stock, setStock] = useState(stocks[0]);
   const [action, setAction] = useState<TradeAction>("买入");
   const [notice, setNotice] = useState("");

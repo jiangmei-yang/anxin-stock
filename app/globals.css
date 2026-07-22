@@ -1938,3 +1938,5 @@ svg { stroke-width: 1.8; }
 @media (prefers-reduced-motion: reduce) {
   .global-assistant-panel { transition-duration: .01ms !important; }
 }
+
+.opportunity-submit-row { display: flex; justify-content: flex-end; gap: 8px; }

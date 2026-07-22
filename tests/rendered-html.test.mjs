@@ -23,7 +23,8 @@ test("server-renders the personal investment workbench", async () => {
   assert.match(html, /<title>安心看股 · 个人投资工作台<\/title>/i);
   assert.match(html, /今天先做什么/);
   assert.match(html, /我看到一个机会/);
-  assert.match(html, /我的投资规则/);
+  assert.match(html, /研究一只股票/);
+  assert.match(html, /我的规则/);
   assert.match(html, /看看我的组合/);
   assert.match(html, /个人投资工作台/);
   assert.match(html, /aria-label="工作台导航"/);
@@ -47,6 +48,25 @@ test("keeps theme, local signal evidence, and four-step precheck in the workbenc
   assert.match(css, /data-theme="dark_focus"/);
   assert.match(css, /data-motion="reduced"/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
+  assert.match(component, /请粘贴至少一句完整说法/);
+  assert.match(component, /请至少写清一项仓位边界/);
+  assert.match(component, /研究并加入持仓/);
+  assert.doesNotMatch(component, /useState\("我偏长期投资/);
+});
+
+test("opens the requested stock workbench view and keeps tool navigation explicit", async () => {
+  const [analysisPage, clientPage, toolShell] = await Promise.all([
+    readFile(new URL("../app/analysis/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/client-page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/product-tool-shell.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(analysisPage, /allowedViews/);
+  assert.match(analysisPage, /initialView = requestedView/);
+  assert.match(clientPage, /useState<View>\(initialView\)/);
+  assert.match(toolShell, /\/analysis\?view=research/);
+  assert.match(toolShell, /\/analysis\?view=portfolio/);
+  assert.match(toolShell, /\/analysis\?view=newDecision/);
+  assert.match(toolShell, /\/analysis\?view=history/);
 });
 
 test("server-renders privacy-preserving AI model settings", async () => {
@@ -102,7 +122,7 @@ test("mounts one global AI assistant across every product route", async () => {
     assert.equal(response.status, 200, path);
     const html = await response.text();
     assert.match(html, /安心看股 AI 助手/, path);
-    assert.match(html, /配置工作台、理解风险，不替你交易/, path);
+    assert.match(html, /查资料、算影响、拆说法；不替你交易/, path);
     assert.match(html, /aria-label="AI 助手对话记录"/, path);
   }
 });
@@ -122,7 +142,10 @@ test("keeps global assistant state, confirmation gates, context, and mobile draw
   assert.match(component, /撤销这次修改/);
   assert.match(component, /selectedProvider/);
   assert.match(state, /pageContextFor/);
+  assert.match(state, /analysis\?view=portfolio/);
+  assert.match(state, /analysis\?view=newDecision/);
   assert.match(state, /selected_asset: null/);
+  assert.match(component, /useSearchParams/);
   assert.match(server, /confirmAssistantCommand/);
   assert.match(server, /确认前，页面不会发生变化/);
   assert.match(css, /\.global-assistant-panel/);

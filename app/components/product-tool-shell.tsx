@@ -22,12 +22,12 @@ type ProductToolShellProps = {
 
 const navigation: Array<{ href: string; label: string; icon: typeof LayoutDashboard; id?: "trade" }> = [
   { href: "/", label: "工作台", icon: LayoutDashboard },
-  { href: "/?view=research", label: "研究", icon: FileSearch },
-  { href: "/?view=portfolio", label: "组合", icon: BriefcaseBusiness },
+  { href: "/analysis?view=research", label: "研究", icon: FileSearch },
+  { href: "/analysis?view=portfolio", label: "组合", icon: BriefcaseBusiness },
   { href: "/quant", label: "量化规则", icon: ScanSearch },
-  { href: "/?view=newDecision", label: "决策审查", icon: ShieldCheck },
+  { href: "/analysis?view=newDecision", label: "决策审查", icon: ShieldCheck },
   { href: "/trade-tool", label: "交易复盘", icon: ReceiptText, id: "trade" },
-  { href: "/?view=history", label: "历史", icon: History },
+  { href: "/analysis?view=history", label: "历史", icon: History },
 ];
 
 export function ProductToolShell({ active, title, description, status, children }: ProductToolShellProps) {

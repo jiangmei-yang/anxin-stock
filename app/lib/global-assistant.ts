@@ -67,7 +67,7 @@ export const ASSISTANT_SESSION_KEY = "anxin.globalAssistant.v1";
 export const WELCOME_MESSAGE: AssistantMessage = {
   id: "welcome",
   type: "assistant_message",
-  content: "你好，我可以帮你配置工作台、理解风险和解释指标。你也可以直接说：我主要做 ETF，隐藏复杂 K 线，每周提醒风险。",
+  content: "告诉我你正在研究什么。我可以先查公开资料、计算组合影响，或把一条市场说法拆成待核实的问题；不会替你下单。",
   createdAt: new Date(0).toISOString(),
 };
 
@@ -76,6 +76,9 @@ export const PAGE_CONTEXTS: Array<{ match: (route: string) => boolean; value: Om
   { match: (route) => route.startsWith("/etf-tool"), value: { page: "etf", label: "ETF 诊断", suggestions: ["解释 ETF 重复暴露", "把重复持仓模块固定到首页"] } },
   { match: (route) => route.startsWith("/trade-tool"), value: { page: "trade_review", label: "交易复盘", suggestions: ["解释我的亏损主要来自什么", "检查我的交易纪律"] } },
   { match: (route) => route.startsWith("/opportunity"), value: { page: "opportunity", label: "机会检查", suggestions: ["这段内容有没有跟风信号", "检查它是否符合我的投资规则"] } },
+  { match: (route) => route.startsWith("/analysis?view=portfolio"), value: { page: "portfolio", label: "我的持仓", suggestions: ["解释当前组合的集中度", "检查仓位是否超过个人边界"] } },
+  { match: (route) => route.startsWith("/analysis?view=newDecision"), value: { page: "decision", label: "决策验证", suggestions: ["帮我拆分事实和推断", "检查计划金额的组合影响"] } },
+  { match: (route) => route.startsWith("/analysis?view=history"), value: { page: "history", label: "历史记录", suggestions: ["总结我反复出现的风险", "比较修改前后的计划"] } },
   { match: (route) => route.startsWith("/analysis"), value: { page: "research", label: "股票研究", suggestions: ["解释估值分位", "帮我整理待核实问题"] } },
   { match: (route) => route.startsWith("/portfolio"), value: { page: "portfolio", label: "我的组合", suggestions: ["解释当前组合的集中度", "增加行业暴露模块"] } },
   { match: (route) => route.startsWith("/profile"), value: { page: "rules", label: "我的规则", suggestions: ["用白话解释这些规则", "切换为每周提醒"] } },

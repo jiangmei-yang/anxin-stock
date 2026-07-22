@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bot,
@@ -44,16 +44,17 @@ type AssistantContextValue = {
 const AssistantContext = createContext<AssistantContextValue | null>(null);
 
 const quickActions = [
-  { label: "帮我配置工作台", prompt: "给我创建一个适合新手的投资工作台" },
+  { label: "研究贵州茅台", href: "/analysis?view=research" },
   { label: "检查我的持仓", prompt: "检查当前持仓最需要核对的集中度和行业暴露" },
-  { label: "分析这只 ETF", prompt: "分析 ETF 510300 的公开持仓与重复暴露" },
-  { label: "我看到一条推荐", href: "/opportunity" },
+  { label: "分析沪深300 ETF", prompt: "分析 ETF 510300 的公开持仓与重复暴露" },
+  { label: "核对一条市场说法", href: "/opportunity" },
 ];
 
 const nowId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
 export function GlobalAIAssistantProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const [state, setState] = useState<AssistantSessionState>(() => createAssistantSession());
   const [providers, setProviders] = useState<AssistantProvider[]>([
@@ -63,7 +64,10 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
   const [providerMenuOpen, setProviderMenuOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const messageEndRef = useRef<HTMLDivElement>(null);
-  const context = useMemo(() => pageContextFor(pathname), [pathname]);
+  const context = useMemo(() => {
+    const query = searchParams.toString();
+    return pageContextFor(query ? `${pathname}?${query}` : pathname);
+  }, [pathname, searchParams]);
 
   useEffect(() => {
     let restored: Partial<AssistantSessionState> | null = null;
@@ -215,7 +219,7 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
         <div className="global-assistant-content">{children}</div>
         <aside className={state.open ? "global-assistant-panel open" : "global-assistant-panel"} aria-label="安心看股 AI 助手" aria-hidden={!state.open}>
           <header className="assistant-header">
-            <div className="assistant-title"><span><Bot /></span><div><strong>安心看股 AI 助手</strong><small>配置工作台、理解风险，不替你交易</small></div></div>
+            <div className="assistant-title"><span><Bot /></span><div><strong>安心看股 AI 助手</strong><small>查资料、算影响、拆说法；不替你交易</small></div></div>
             <Button variant="ghost" size="icon" onClick={() => setOpen(false)} aria-label="收起 AI 助手"><PanelRightClose /></Button>
           </header>
 
@@ -255,7 +259,7 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
           <div className="assistant-suggestion-row" aria-label="当前页面建议">{context.suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => setState((current) => ({ ...current, draft: suggestion }))}>{suggestion}</button>)}</div>
 
           <form className="assistant-composer" onSubmit={(event) => { event.preventDefault(); void send(); }}>
-            <Textarea value={state.draft} onChange={(event) => setState((current) => ({ ...current, draft: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} placeholder="例如：隐藏复杂 K 线，把财报放到顶部" aria-label="向 AI 助手输入" rows={2} />
+            <Textarea value={state.draft} onChange={(event) => setState((current) => ({ ...current, draft: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} placeholder="例如：检查 600519 最近有哪些可核实变化" aria-label="向 AI 助手输入" rows={2} />
             <div><button type="button" onClick={() => void resetConversation()}><History />重置会话</button><span>Enter 发送 · Shift+Enter 换行</span><Button type="submit" size="icon" disabled={!state.draft.trim() || sending} aria-label="发送"><Send /></Button></div>
           </form>
         </aside>
