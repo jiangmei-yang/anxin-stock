@@ -59,6 +59,42 @@ test("server-renders privacy-preserving AI model settings", async () => {
   assert.doesNotMatch(html, /sk-[a-zA-Z0-9]/);
 });
 
+test("mounts one global AI assistant across every product route", async () => {
+  const routes = ["/", "/workspace", "/opportunity", "/portfolio", "/analysis", "/etf-tool", "/trade-tool", "/ai-settings"];
+  for (const path of routes) {
+    const response = await render(path);
+    assert.equal(response.status, 200, path);
+    const html = await response.text();
+    assert.match(html, /安心看股 AI 助手/, path);
+    assert.match(html, /配置工作台、理解风险，不替你交易/, path);
+    assert.match(html, /aria-label="AI 助手对话记录"/, path);
+  }
+});
+
+test("keeps global assistant state, confirmation gates, context, and mobile drawer in source", async () => {
+  const [component, state, server, layout, css] = await Promise.all([
+    readFile(new URL("../app/components/global-ai-assistant.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/global-assistant.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/assistant-server.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(layout, /GlobalAIAssistantProvider/);
+  assert.match(component, /sessionStorage\.setItem\(ASSISTANT_SESSION_KEY/);
+  assert.match(component, /pendingPreview/);
+  assert.match(component, /确认应用/);
+  assert.match(component, /撤销这次修改/);
+  assert.match(component, /selectedProvider/);
+  assert.match(state, /pageContextFor/);
+  assert.match(state, /selected_asset: null/);
+  assert.match(server, /confirmAssistantCommand/);
+  assert.match(server, /确认前，页面不会发生变化/);
+  assert.match(css, /\.global-assistant-panel/);
+  assert.match(css, /height: min\(82vh, 760px\)/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+  assert.doesNotMatch(component, /API[_ ]?KEY/i);
+});
+
 test("runs privacy-preserving trade attribution without a Python backend", async () => {
   const csv = "日期,代码,名称,方向,价格,数量,金额,费用\n2026-01-02,600519,贵州茅台,买入,100,10,1000,1\n2026-01-03,600519,贵州茅台,卖出,110,4,440,1";
   const response = await render("/api/trade/attribution", {

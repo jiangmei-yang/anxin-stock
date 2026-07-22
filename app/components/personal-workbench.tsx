@@ -61,7 +61,7 @@ export function PersonalWorkbench({ surface, authenticatedUser }: { surface: Sur
 
   useEffect(() => {
     let active = true;
-    fetch("/api/me/snapshot", { cache: "no-store" }).then(async (response) => {
+    const loadSnapshot = () => fetch("/api/me/snapshot", { cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("unavailable");
       const payload = await response.json() as { status: string; snapshot?: Snapshot };
       if (!active) return;
@@ -69,7 +69,9 @@ export function PersonalWorkbench({ surface, authenticatedUser }: { surface: Sur
       if (!next.workspaces) next.workspaces = workspaces;
       setSnapshot(next); setStatus("ready");
     }).catch(() => { if (active) setStatus("local"); });
-    return () => { active = false; };
+    void loadSnapshot();
+    window.addEventListener("anxin:snapshot-updated", loadSnapshot);
+    return () => { active = false; window.removeEventListener("anxin:snapshot-updated", loadSnapshot); };
     // The default workspace is a bootstrap value, not a changing dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

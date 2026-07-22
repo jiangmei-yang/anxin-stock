@@ -40,6 +40,12 @@ ANXIN_API_URL=https://你的-python-api-域名
 - `/etf-tool`：ETF 持仓诊断；
 - `/trade-tool`：持仓交易复盘。
 
+## 全局 AI 助手
+
+应用根布局挂载同一个 AI 助手。桌面端为可折叠右侧栏，移动端为底部抽屉；切换路由时对话、草稿、所选模型和未确认配置保留在当前标签页。工作台修改必须先通过配置预览，再调用确认或取消接口；确认后可撤销。助手只传递当前路由、工作台编号和用户主动输入，不读取完整交易记录，也不在浏览器保存 API Key。
+
+相关接口：`POST /assistant/message`、`GET /assistant/session`、`POST /assistant/session/reset`、`POST /workspace/command`、`POST /workspace/command/{id}/confirm`、`POST /workspace/command/{id}/cancel`、`POST /workspace/undo`。
+
 ## 数据与合规边界
 
 - 不连接券商，不执行自动交易；

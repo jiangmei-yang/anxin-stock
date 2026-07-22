@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { GlobalAIAssistantProvider } from "./components/global-ai-assistant";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -20,5 +21,5 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-CN"><body><TooltipProvider delay={350}>{children}</TooltipProvider></body></html>;
+  return <html lang="zh-CN"><body><TooltipProvider delay={350}><GlobalAIAssistantProvider>{children}</GlobalAIAssistantProvider></TooltipProvider></body></html>;
 }

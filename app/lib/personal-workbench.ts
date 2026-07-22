@@ -106,6 +106,38 @@ export function previewWorkspaceChange(workspace: Workspace, rawInstruction: str
     if (!target) { target = { type: "financial_quality", visible: true, order: 0, width: "full", density: preview.density }; preview.modules.push(target); }
     target.visible = true; preview.modules = [target, ...preview.modules.filter((item) => item !== target)]; changes.push("财报体检移动到顶部");
   }
+  const requestedModules: Array<[RegExp, ModuleType, string]> = [
+    [/ETF\s*(重复暴露|重复持仓)|重复暴露|重复持仓/i, "etf_overlap", "ETF 重复暴露"],
+    [/行业暴露|行业分布/, "sector_exposure", "行业暴露"],
+    [/持仓风险|组合风险/, "portfolio_risk", "持仓风险"],
+    [/最近风险提醒|风险提醒模块/, "recent_alerts", "最近风险提醒"],
+    [/社交内容风险|跟风风险/, "social_risk", "社交内容风险"],
+    [/交易复盘/, "trade_review", "最近交易行为"],
+    [/关注列表|自选列表/, "watchlist", "关注列表"],
+  ];
+  for (const [pattern, moduleType, label] of requestedModules) {
+    if (!pattern.test(instruction)) continue;
+    let target = preview.modules.find((item) => item.type === moduleType);
+    if (/(增加|添加|显示|固定)/.test(instruction)) {
+      if (!target) {
+        target = { type: moduleType, visible: true, order: preview.modules.length, width: "half", density: preview.density };
+        preview.modules.push(target);
+        changes.push(`添加${label}`);
+      } else if (!target.visible) {
+        target.visible = true;
+        changes.push(`显示${label}`);
+      }
+    }
+    if (target && /(顶部|最前|第一|置顶)/.test(instruction)) {
+      target.visible = true;
+      preview.modules = [target, ...preview.modules.filter((item) => item !== target)];
+      changes.push(`${label}移动到顶部`);
+    }
+    if (target && /(隐藏|不看|去掉)/.test(instruction)) {
+      target.visible = false;
+      changes.push(`隐藏${label}`);
+    }
+  }
   if (/(隐藏|不看|去掉).*(K线|技术|趋势)/.test(instruction)) { preview.modules.forEach((item) => { if (["technical_chart", "technical_signals"].includes(item.type)) item.visible = false; }); changes.push("隐藏技术图表和技术指标"); }
   if (/(简洁|只显示结论|少一点)/.test(instruction)) { preview.density = "simple"; preview.modules.forEach((item) => { item.density = "simple"; }); changes.push("信息密度调整为简洁"); }
   if (/(专业|详细数据|更多数据)/.test(instruction)) { preview.density = "professional"; preview.modules.forEach((item) => { item.density = "professional"; }); changes.push("信息密度调整为专业"); }
