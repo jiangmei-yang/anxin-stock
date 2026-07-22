@@ -198,6 +198,14 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 
 当前 Sites 部署没有后台定时执行器，因此日、周、月和事件计划可以保存，但会明确显示 `runner_status=unavailable`，不会声称正在自动监控。缓存或过期行情可用于查看上次状态，但绝不会生成新的触发通知。所有策略使用 `manual_confirmation`，不连接券商、不提交订单、不承诺收益。
 
+## 目标驱动的量化 Engine Router
+
+量化页默认让用户描述“想完成什么”，而不是选择 Qlib、backtrader、FinRL 或 VeighNa。`POST /agent/goal/parse` 和 `POST /quant/engine/route` 会提取任务、资产、频率、期限、风险、回测/模拟方式和最多三个必要问题，再选择最简单、透明且能完整执行的研究引擎。普通模式只显示“平台低频策略引擎”“因子研究引擎”等任务语言；实际适配器、版本、数据处理和限制只在“技术详情”中出现。
+
+当前生产状态必须如实理解：内置 `NativeAShareEngine` 已可用于日频规则、A 股可信回测和纸面模拟；Backtrader、Qlib、FinRL、VeighNa 只有统一 Adapter 契约和能力/许可证登记，尚未安装，也未通过生产审核。简单兼容任务可以明确降级到内置规则引擎；机器学习、强化学习或外部事件任务会直接阻断，不会伪造高级引擎结果。
+
+相关接口包括 `/quant/engines`、`/quant/engines/{engine_id}`、`/quant/strategy/compile`、`/quant/strategy/switch-engine`、`/quant/strategy/compare`、`/quant/runs/{run_id}`、`/quant/runs/{run_id}/logs`、`/quant/licenses` 和 `/quant/licenses/check`。所有编译结果使用统一非交易 DSL，`allow_live_order` 固定为 `false`；切换引擎先预览，未安装或许可证未审核的适配器不能应用到生产任务。
+
 ## Learn More
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)

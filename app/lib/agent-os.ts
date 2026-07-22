@@ -8,6 +8,7 @@ import { readUserSnapshot, writeUserSnapshot, type UserSnapshot } from "./user-s
 import { POST as runTradeAttributionRoute } from "../api/trade/attribution/route";
 import {buildCapabilityRegistry,searchCapabilities} from "./capability-rag";
 import {parseStrategyDeterministically} from "./natural-language-strategy";
+import {parseQuantGoal,routeQuantEngine} from "./quant-engine-router";
 
 export type AgentSource={source_id:string;name:string;collected_at:string;sample_scope:string;status:"available"|"missing"|"unavailable"};
 export type AgentToolCall={tool_id:string;status:"pending"|"running"|"completed"|"failed"|"cancelled";started_at?:string;completed_at?:string;input:Record<string,unknown>;output?:unknown;error?:string;sources:AgentSource[];reliability:ReliabilityState};
@@ -68,6 +69,7 @@ async function executeSafeTool(tool:ToolDefinition,goal:string,snapshot:AgentSna
     else if(tool.toolId==="run_trade_attribution"){call.output=await tradeAttributionResult(goal);call.sources=[source("user_uploaded_csv",(call.output as {data_status?:string}).data_status==="missing"?"missing":"available")];}
     else if(tool.toolId==="analyze_social_content"){const looksLikeSample=goal.length>120||/[“”「」]|https?:\/\//.test(goal);if(!looksLikeSample){call.output={type:"social_trend_analysis",period:"暂无数据",sources:[],topics:[],data_status:"insufficient_sample",message:"当前没有足够样本。请粘贴或上传合法取得的公开内容；系统不会伪造小红书或雪球热度。",disclaimer:"社交讨论热度不代表投资价值或未来收益。"};call.sources=[source("xiaohongshu_live","unavailable")];}else{call.output={type:"social_content_analysis",sample_count:1,analysis:analyzeSocialContent(goal),disclaimer:"社交热度仅代表内容讨论情况，不构成投资建议或买卖依据。"};call.sources=[source("user_uploaded_social_content")];}}
     else if(tool.toolId==="parse_natural_strategy"||tool.toolId==="validate_strategy_dsl"){const preview=parseStrategyDeterministically(goal);call.output={data_status:preview.validation.status==="blocked"?"missing_input":"available",preview,validation:preview.validation,message:preview.validation.allow_save?"策略已转换为白名单 DSL，仍需用户确认后才能保存。":"策略已解析，请先补充页面列出的必要信息。"};call.sources=[source("user_input"),source("strategy_registry")];}
+    else if(tool.toolId==="route_quant_engine"){const parsed=parseQuantGoal(goal),route=routeQuantEngine(parsed);call.output={data_status:route.execution_status==="blocked"?"not_executed":"available",goal:parsed,engine_route:route,message:route.execution_status==="blocked"?"已找到适合的研究方式，但对应适配器尚不可用；没有伪造执行结果。":"系统已选择适合当前目标的研究方式。"};call.sources=[source("user_input"),source("engine_registry")];}
     else if(tool.toolId==="get_news"||tool.toolId==="get_social_content"){call.output={data_status:"not_executed",message:"当前没有已授权的自动数据源；请上传内容或由管理员配置合法接口。"};call.sources=tool.dataSources.map((id)=>source(id,"unavailable"));}
     else{call.output={data_status:"not_executed",message:"工具已匹配，但仍需要补充输入或在对应工具页面执行。"};call.sources=tool.dataSources.map((id)=>source(id,"missing"));}
     const dataStatus=String((call.output as {data_status?:string})?.data_status??"");
