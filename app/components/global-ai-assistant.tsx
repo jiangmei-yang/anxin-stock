@@ -9,11 +9,13 @@ import {
   ChevronRight,
   CircleAlert,
   Cpu,
+  Download,
   History,
   MessageSquareText,
   PanelRightClose,
   PanelRightOpen,
   RotateCcw,
+  Redo2,
   Send,
   Settings2,
   ShieldCheck,
@@ -33,6 +35,7 @@ import {
   type AssistantProvider,
   type AssistantSessionState,
 } from "../lib/global-assistant";
+import { MODULE_LABELS, WORKFLOW_LABELS } from "../lib/personal-workbench";
 
 type AssistantContextValue = {
   state: AssistantSessionState;
@@ -44,10 +47,12 @@ type AssistantContextValue = {
 const AssistantContext = createContext<AssistantContextValue | null>(null);
 
 const quickActions = [
-  { label: "研究贵州茅台", href: "/analysis?view=research" },
-  { label: "检查我的持仓", prompt: "检查当前持仓最需要核对的集中度和行业暴露" },
-  { label: "分析沪深300 ETF", prompt: "分析 ETF 510300 的公开持仓与重复暴露" },
-  { label: "核对一条市场说法", href: "/opportunity" },
+  { label: "我是投资新手", prompt: "我是投资新手，不知道该看什么" },
+  { label: "我想先学习", prompt: "我只想先学习，不准备真实交易" },
+  { label: "我已经有持仓", prompt: "我已经有持仓，想先诊断风险" },
+  { label: "我常受社交平台影响", prompt: "我经常被社交平台内容影响" },
+  { label: "我没时间看盘", prompt: "我没时间看盘，帮我安排工作台" },
+  { label: "我想先模拟", prompt: "我想先模拟，不想真实交易" },
 ];
 
 const nowId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -94,13 +99,15 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
     let active=true;
     const loadProviders=()=>fetch("/assistant/session", { cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("unavailable");
-      const payload = await response.json() as { session_id?: string; workspace_id?: string; providers?: AssistantProvider[]; default_provider_id?: string };
+      const payload = await response.json() as { session_id?: string; workspace_id?: string; providers?: AssistantProvider[]; default_provider_id?: string; can_undo?:boolean; can_redo?:boolean };
       if (!active) return;
       if (payload.providers?.length) setProviders(payload.providers);
       setState((current) => ({
         ...current,
         sessionId: current.sessionId || payload.session_id || createAssistantSession().sessionId,
         currentWorkspaceId: payload.workspace_id || current.currentWorkspaceId,
+        canUndo:payload.can_undo??current.canUndo,
+        canRedo:payload.can_redo??current.canRedo,
         selectedProvider: payload.providers?.some((item) => item.providerId === current.selectedProvider && item.enabled && item.secretStatus !== "missing")
           ? current.selectedProvider
           : payload.default_provider_id || "mock",
@@ -144,13 +151,15 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
           history: state.messages.filter((item) => item.type === "user_message" || item.type === "assistant_message" || item.type === "analysis").slice(-10).map((item) => ({ role:item.type === "user_message" ? "user" : "assistant", content:item.content })),
         }),
       });
-      const payload = await response.json() as { type?:AssistantMessage["type"];content?:string;message?: { type?: AssistantMessage["type"]; content?: string; preview?: AssistantCommandPreview }; preview?:AssistantCommandPreview;model_used?: string; provider_id?:string;session_id?: string };
+      const payload = await response.json() as { type?:AssistantMessage["type"];content?:string;message?: { type?: AssistantMessage["type"]; content?: string; preview?: AssistantCommandPreview }; preview?:AssistantCommandPreview;model_used?: string; provider_id?:string;session_id?: string;tool_used?:string|null };
       if (!response.ok) throw new Error(payload.content || payload.message?.content || "助手暂时没有响应");
       appendMessage({
         id: nowId("assistant"),
         type: payload.type ?? payload.message?.type ?? "assistant_message",
         content: payload.content || payload.message?.content || "已收到。",
         preview: payload.preview ?? payload.message?.preview,
+        toolUsed:payload.tool_used,
+        modelUsed:payload.model_used,
         createdAt: new Date().toISOString(),
       });
       if (payload.provider_id) setState((current) => ({ ...current, selectedProvider:payload.provider_id! }));
@@ -166,7 +175,7 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
       const response = await fetch(`/workspace/command/${encodeURIComponent(preview.commandId)}/confirm`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirmed: true }) });
       const payload = await response.json() as { message?: string };
       if (!response.ok) throw new Error(payload.message || "配置未能应用");
-      setState((current) => ({ ...current, pendingPreview: null, currentWorkspaceId: preview.workspaceId }));
+      setState((current) => ({ ...current, pendingPreview: null, currentWorkspaceId: preview.workspaceId, canUndo:true, canRedo:false }));
       appendMessage({ id: nowId("status"), type: "system_status", content: "配置已应用。你可以继续浏览，或撤销这次修改。", action: "undo", createdAt: new Date().toISOString() });
       window.dispatchEvent(new CustomEvent("anxin:snapshot-updated"));
       router.refresh();
@@ -188,14 +197,34 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
     setSending(true);
     try {
       const response = await fetch("/workspace/undo", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ workspace_id: state.currentWorkspaceId, confirmed: true }) });
-      const payload = await response.json() as { message?: string };
+      const payload = await response.json() as { message?: string;workspace?:{id:string};can_undo?:boolean };
       if (!response.ok) throw new Error(payload.message || "没有可撤销的版本");
-      appendMessage({ id: nowId("status"), type: "system_status", content: "已恢复到上一个确认版本。", createdAt: new Date().toISOString() });
+      setState((current)=>({...current,currentWorkspaceId:payload.workspace?.id??current.currentWorkspaceId,canUndo:payload.can_undo??current.canUndo,canRedo:true}));
+      appendMessage({ id: nowId("status"), type: "system_status", content: "已恢复到上一个确认版本。", action:"redo", createdAt: new Date().toISOString() });
       window.dispatchEvent(new CustomEvent("anxin:snapshot-updated"));
       router.refresh();
     } catch (error) {
       appendMessage({ id: nowId("error"), type: "error_message", content: error instanceof Error ? error.message : "撤销失败", createdAt: new Date().toISOString() });
     } finally { setSending(false); }
+  };
+
+  const redo = async () => {
+    setSending(true);
+    try {
+      const response=await fetch("/workspace/redo",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({workspace_id:state.currentWorkspaceId,confirmed:true})});
+      const payload=await response.json() as {message?:string;workspace?:{id:string};can_redo?:boolean};
+      if(!response.ok) throw new Error(payload.message||"没有可重做的版本");
+      setState((current)=>({...current,currentWorkspaceId:payload.workspace?.id??current.currentWorkspaceId,canUndo:true,canRedo:payload.can_redo??false}));
+      appendMessage({id:nowId("status"),type:"system_status",content:"已重做刚才撤销的配置。",action:"undo",createdAt:new Date().toISOString()});
+      window.dispatchEvent(new CustomEvent("anxin:snapshot-updated")); router.refresh();
+    } catch(error){appendMessage({id:nowId("error"),type:"error_message",content:error instanceof Error?error.message:"重做失败",createdAt:new Date().toISOString()});}
+    finally{setSending(false);}
+  };
+
+  const exportWorkspace = async () => {
+    const response=await fetch(`/workspace/export?workspace_id=${encodeURIComponent(state.currentWorkspaceId)}`);
+    if(!response.ok){appendMessage({id:nowId("error"),type:"error_message",content:"配置导出失败",createdAt:new Date().toISOString()});return;}
+    const blob=await response.blob(); const url=URL.createObjectURL(blob); const anchor=document.createElement("a"); anchor.href=url; anchor.download="anxin-workspace.json"; anchor.click(); URL.revokeObjectURL(url);
   };
 
   const resetConversation = async () => {
@@ -244,11 +273,11 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
                 {message.type !== "user_message" && <span className="assistant-message-icon">{message.type === "error_message" || message.type === "risk_alert" ? <CircleAlert /> : message.type === "system_status" ? <Check /> : <Bot />}</span>}
                 <div>
                   <p>{message.content}</p>
-                  {index === 0 && <div className="assistant-quick-actions">{quickActions.map((action) => action.href
-                    ? <Button key={action.label} variant="outline" size="sm" onClick={() => router.push(action.href!)}>{action.label}<ChevronRight data-icon="inline-end" /></Button>
-                    : <Button key={action.label} variant="outline" size="sm" onClick={() => void send(action.prompt)}>{action.label}</Button>)}</div>}
+                  {index === 0 && <div className="assistant-quick-actions">{quickActions.map((action) => <Button key={action.label} variant="outline" size="sm" onClick={() => void send(action.prompt)}>{action.label}</Button>)}</div>}
+                  {(message.modelUsed||message.toolUsed) && <small className="assistant-call-status"><Cpu />{message.modelUsed||"规则模式"}{message.toolUsed?` · 已调用 ${message.toolUsed}`:" · 未调用数据工具"}</small>}
                   {message.preview && <ConfigPreviewCard preview={message.preview} pending={state.pendingPreview?.commandId === message.preview.commandId} disabled={sending} onConfirm={confirmPreview} onCancel={cancelPreview} onContinue={(preview) => setState((current) => ({ ...current, draft: `${preview.changes.join("，")}，另外` }))} />}
                   {message.action === "undo" && <Button variant="outline" size="sm" disabled={sending} onClick={() => void undo()}><RotateCcw data-icon="inline-start" />撤销这次修改</Button>}
+                  {message.action === "redo" && <Button variant="outline" size="sm" disabled={sending} onClick={() => void redo()}><Redo2 data-icon="inline-start" />重做</Button>}
                 </div>
               </article>
             ))}
@@ -256,6 +285,7 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
             <div ref={messageEndRef} />
           </div>
 
+          <div className="assistant-workspace-actions" aria-label="工作台配置操作"><button disabled={!state.canUndo||sending} onClick={()=>void undo()}><RotateCcw />撤销</button><button disabled={!state.canRedo||sending} onClick={()=>void redo()}><Redo2 />重做</button><button onClick={()=>void send("恢复默认工作台")}><Settings2 />恢复默认</button><button onClick={()=>void exportWorkspace()}><Download />导出配置</button></div>
           <div className="assistant-suggestion-row" aria-label="当前页面建议">{context.suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => setState((current) => ({ ...current, draft: suggestion }))}>{suggestion}</button>)}</div>
 
           <form className="assistant-composer" onSubmit={(event) => { event.preventDefault(); void send(); }}>
@@ -282,14 +312,19 @@ function ConfigPreviewCard({ preview, pending, disabled, onConfirm, onCancel, on
 }) {
   return (
     <section className="assistant-config-preview" aria-label="待确认的工作台配置">
-      <header><Settings2 /><div><strong>即将修改工作台</strong><small>{pending ? "等待你的确认" : "已处理"}</small></div>{pending && <Badge variant="secondary">待确认</Badge>}</header>
+      <header><Settings2 /><div><strong>{preview.type==="workspace_recommendation"?"推荐工作台":"配置预览"}</strong><small>{pending ? "确认前不会改变页面" : "已处理"}</small></div>{pending && <Badge variant="secondary">待确认</Badge>}</header>
+      {preview.recommendation && <div className="assistant-recommendation"><span><b>识别阶段</b>{stageLabel(preview.recommendation.userStage)}</span><span><b>推荐</b>{preview.proposedWorkspace?.name}</span><p>{preview.recommendation.reason}</p></div>}
+      {preview.affectedModules.length>0 && <div className="assistant-preview-section"><b>涉及模块</b><div>{preview.affectedModules.map((module)=><span key={module}>{MODULE_LABELS[module]}</span>)}</div></div>}
+      {preview.workflow?.length ? <div className="assistant-preview-section"><b>新的流程</b><ol>{preview.workflow.map((step,index)=><li key={`${step}-${index}`}>{WORKFLOW_LABELS[step]}</li>)}</ol></div>:null}
       <ul>{preview.changes.map((change) => <li key={change}><Check /><span>{change}</span></li>)}</ul>
       {preview.warnings.map((warning) => <p key={warning}><ShieldCheck />{warning}</p>)}
       {preview.questions.map((question) => <p key={question}><CircleAlert />{question}</p>)}
-      {pending && <footer><Button size="sm" disabled={disabled} onClick={() => onConfirm(preview)}>确认应用</Button><Button variant="outline" size="sm" disabled={disabled} onClick={() => onCancel(preview)}>取消</Button><Button variant="ghost" size="sm" disabled={disabled} onClick={() => onContinue(preview)}>继续修改</Button></footer>}
+      {pending && <footer><Button aria-label="确认应用" size="sm" disabled={disabled} onClick={() => onConfirm(preview)}>应用配置</Button><Button variant="outline" size="sm" disabled={disabled} onClick={() => onContinue(preview)}>继续调整</Button><Button variant="ghost" size="sm" disabled={disabled} onClick={() => onCancel(preview)}>暂不设置</Button></footer>}
     </section>
   );
 }
+
+function stageLabel(stage:NonNullable<AssistantCommandPreview["userStage"]>){return ({beginner:"完全新手",learner:"学习阶段",long_term:"长期投资",etf_user:"ETF 用户",active_trader:"短线/波段",reviewer:"重视复盘",risk_first:"风险优先",unknown:"信息待补充"} as const)[stage];}
 
 export function useGlobalAIAssistant() {
   const context = useContext(AssistantContext);

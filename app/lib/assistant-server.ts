@@ -3,7 +3,10 @@ import {
   DEFAULT_THEME,
   createWorkspace,
   previewWorkspaceChange,
+  type ExploratoryGoal,
+  type UserStage,
   type Workspace,
+  type WorkspaceChangePreview,
 } from "./personal-workbench";
 import { isConfigurationRequest, pageContextFor, toCommandPreview } from "./global-assistant";
 import { callAIProvider, readProviderState, type AIProviderProfile, type ServerAIProviderProfile } from "./ai-provider-catalog";
@@ -18,6 +21,8 @@ type StoredCommand = {
   changes: string[];
   warnings: string[];
   questions: string[];
+  parsed: WorkspaceChangePreview;
+  createNew?: boolean;
   createdAt: string;
   expiresAt: string;
 };
@@ -28,8 +33,10 @@ type AssistantSnapshot = UserSnapshot & {
   aiTaskRouting?: Record<string, string>;
   workspaces?: Workspace[];
   activeWorkspaceId?: string;
-  workspaceVersions?: Array<{ configId: string; workspace: Workspace; createdAt: string }>;
+  workspaceVersions?: Array<{ configId: string; workspace: Workspace; createdAt: string; action?:"update"|"create" }>;
+  workspaceRedoVersions?: Array<{ configId: string; workspace: Workspace; createdAt: string; action?:"update"|"create" }>;
   workspaceAudit?: Array<{ commandId: string; intent: string; proposedChanges: string[]; status: "applied" | "cancelled"; createdAt: string; confirmedAt?: string }>;
+  exploratoryPreferences?: { userStage:UserStage; goal:ExploratoryGoal; holdingPeriod?:string; lossComfort?:string; weeklyTime?:string; confirmedAt:string };
   assistantPendingCommands?: Record<string, StoredCommand>;
 };
 
@@ -38,6 +45,7 @@ const normalizeWorkspace = (workspace: Workspace): Workspace => ({
   description: workspace.description ?? "按自己的研究流程调整",
   theme: workspace.theme ?? DEFAULT_THEME,
   modules: workspace.modules ?? [],
+  workflow: workspace.workflow ?? ["research", "review_risk", "confirm_next_step"],
 });
 
 async function snapshotOrDefault() {
@@ -106,19 +114,23 @@ export async function createAssistantPreview(message: string, workspaceId?: stri
     ? workspaces.find((item) => message.includes(item.name))
     : undefined;
   const current = namedWorkspace ?? workspaces.find((item) => item.id === workspaceId) ?? activeWorkspace;
-  const parsed = namedWorkspace
-    ? { preview: namedWorkspace, changes: [`切换到${namedWorkspace.name}`], warnings: [], questions: [], intent: "switch_workspace", canApply: true, needsConfirmation: true as const }
+  let parsed:WorkspaceChangePreview = namedWorkspace
+    ? { preview: namedWorkspace, patch:[], summary:`切换到${namedWorkspace.name}`, affectedModules:[], changes: [`切换到${namedWorkspace.name}`], warnings: [], questions: [], intent: "switch_workspace", canApply: true, needsConfirmation: true as const }
     : previewWorkspaceChange(current, message);
+  const createNew=Boolean(parsed.recommendation&&/(创建|新建)/.test(message));
+  if(createNew&&parsed.recommendation){const created=createWorkspace(parsed.recommendation.recommendedTemplate);parsed={...parsed,preview:created,changes:[`新建“${created.name}”`,...parsed.changes.filter((item)=>!item.startsWith("应用“"))],summary:`新建“${created.name}”并保存为独立工作台`};}
   const commandId = `cmd_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
   const now = new Date();
   const command: StoredCommand = {
     commandId,
-    workspaceId: current.id,
+    workspaceId: parsed.preview.id,
     currentWorkspace: current,
     proposedWorkspace: parsed.preview,
     changes: parsed.changes,
     warnings: parsed.warnings,
     questions: parsed.questions,
+    parsed,
+    createNew,
     createdAt: now.toISOString(),
     expiresAt: new Date(now.getTime() + 15 * 60_000).toISOString(),
   };
@@ -155,12 +167,15 @@ export async function handleAssistantMessage(input: {
   }
 
   if (isConfigurationRequest(message)) {
-    const { parsed, commandId, current } = await createAssistantPreview(message, input.workspace_id || activeWorkspace.id);
+    const { parsed, commandId } = await createAssistantPreview(message, input.workspace_id || activeWorkspace.id);
     if (!parsed.canApply) {
-      return responsePayload({sessionId,type:parsed.warnings.length?"risk_alert":"clarification",content:parsed.warnings[0]||parsed.questions[0]||"请补充要修改的模块、主题、信息密度或提醒频率。",intent:"workspace_config",provider});
+      return responsePayload({sessionId,type:parsed.warnings.length?"risk_alert":"clarification",content:parsed.warnings[0]||parsed.questions[0]||"请补充你想解决的问题、可投入时间或希望调整的模块。",intent:"workspace_config",provider,toolUsed:"workspace_orchestrator"});
     }
-    const preview=toCommandPreview(commandId,current.id,parsed);
-    return responsePayload({sessionId,type:"config_preview",content:"我整理了一份工作台配置变更，请确认。确认前，页面不会发生变化。",intent:"workspace_config",provider,preview,requiresConfirmation:true});
+    const preview=toCommandPreview(commandId,parsed.preview.id,parsed);
+    const content=parsed.recommendation
+      ? `${parsed.recommendation.reason}${parsed.questions.length ? ` 我先给出一个安全起点，并列出 ${parsed.questions.length} 个可以继续调整的问题。` : ""}`
+      : "我整理了一份工作台配置变更，请确认。确认前，页面不会发生变化。";
+    return responsePayload({sessionId,type:"config_preview",content,intent:parsed.recommendation?"workspace_recommendation":"workspace_config",provider,preview,requiresConfirmation:true,toolUsed:"workspace_orchestrator"});
   }
   const tool=await resolveTool(message,snapshot);
   if(tool.clarification) return responsePayload({sessionId,type:"clarification",content:tool.clarification,intent:tool.intent,provider,suggestedActions:["补充代码","打开对应工具"]});
@@ -188,10 +203,13 @@ export async function confirmAssistantCommand(commandId: string) {
     await writeUserSnapshot(snapshot);
     throw new Error("配置预览已过期，请重新生成");
   }
-  snapshot.workspaceVersions = [...(snapshot.workspaceVersions ?? []), { configId: `config-${Date.now()}`, workspace: command.currentWorkspace, createdAt: new Date().toISOString() }].slice(-50);
+  const versionAction:"create"|"update"=command.createNew?"create":"update";
+  snapshot.workspaceVersions = [...(snapshot.workspaceVersions ?? []), { configId: `config-${Date.now()}`, workspace: command.createNew?command.proposedWorkspace:command.currentWorkspace, createdAt: new Date().toISOString(), action:versionAction }].slice(-50);
+  snapshot.workspaceRedoVersions = [];
   snapshot.workspaceAudit = [...(snapshot.workspaceAudit ?? []), { commandId, intent: "update_workspace", proposedChanges: command.changes, status: "applied" as const, createdAt: command.createdAt, confirmedAt: new Date().toISOString() }].slice(-200);
-  snapshot.workspaces = workspaces.map((item) => item.id === command.workspaceId ? command.proposedWorkspace : item);
+  snapshot.workspaces = command.createNew ? [...workspaces,command.proposedWorkspace] : workspaces.map((item) => item.id === command.workspaceId ? command.proposedWorkspace : item);
   snapshot.activeWorkspaceId = command.workspaceId;
+  if (command.parsed?.recommendation) snapshot.exploratoryPreferences = { userStage:command.parsed.recommendation.userStage, goal:command.parsed.recommendation.goal, confirmedAt:new Date().toISOString() };
   delete snapshot.assistantPendingCommands?.[commandId];
   await writeUserSnapshot(snapshot);
   return { status: "applied", workspace: command.proposedWorkspace, applied_changes: command.changes, can_undo: true };
@@ -214,19 +232,50 @@ export async function undoAssistantWorkspace(workspaceId?: string) {
   const index = versions.findLastIndex((item) => item.workspace.id === targetId);
   if (index < 0) throw new Error("当前工作台没有可撤销的版本");
   const restored = versions[index].workspace;
-  snapshot.workspaces = workspaces.map((item) => item.id === targetId ? restored : item);
+  const current = workspaces.find((item)=>item.id===targetId) ?? activeWorkspace;
+  if(versions[index].action==="create"){
+    const kept=workspaces.filter((item)=>item.id!==targetId);
+    snapshot.workspaces=kept;
+    snapshot.activeWorkspaceId=kept[0]?.id;
+  }else snapshot.workspaces = workspaces.map((item) => item.id === targetId ? restored : item);
   snapshot.workspaceVersions = versions.filter((_, itemIndex) => itemIndex !== index);
+  snapshot.workspaceRedoVersions = [...(snapshot.workspaceRedoVersions ?? []), {configId:`redo-${Date.now()}`,workspace:current,createdAt:new Date().toISOString(),action:versions[index].action}].slice(-50);
   snapshot.workspaceAudit = [...(snapshot.workspaceAudit ?? []), { commandId: `undo-${Date.now()}`, intent: "restore_previous", proposedChanges: ["恢复上一个已确认版本"], status: "applied" as const, createdAt: new Date().toISOString(), confirmedAt: new Date().toISOString() }].slice(-200);
   await writeUserSnapshot(snapshot);
-  return { status: "restored", workspace: restored, can_undo: snapshot.workspaceVersions.some((item) => item.workspace.id === targetId) };
+  return { status: "restored", workspace: versions[index].action==="create"?(snapshot.workspaces[0]??restored):restored, can_undo: snapshot.workspaceVersions.some((item) => item.workspace.id === targetId), can_redo:true };
+}
+
+export async function redoAssistantWorkspace(workspaceId?: string) {
+  const { snapshot, workspaces, activeWorkspace } = await snapshotOrDefault();
+  const versions = snapshot.workspaceRedoVersions ?? [];
+  let index = versions.findLastIndex((item)=>item.workspace.id===(workspaceId||activeWorkspace.id));
+  if(index<0&&versions.length) index=versions.length-1;
+  if(index<0) throw new Error("当前工作台没有可重做的版本");
+  const restored=versions[index].workspace;
+  const targetId=restored.id;
+  snapshot.workspaceVersions=[...(snapshot.workspaceVersions??[]),{configId:`config-${Date.now()}`,workspace:restored,createdAt:new Date().toISOString(),action:versions[index].action}].slice(-50);
+  snapshot.workspaceRedoVersions=versions.filter((_,itemIndex)=>itemIndex!==index);
+  snapshot.workspaces=versions[index].action==="create"&&!workspaces.some((item)=>item.id===targetId)?[...workspaces,restored]:workspaces.map((item)=>item.id===targetId?restored:item);
+  snapshot.activeWorkspaceId=targetId;
+  snapshot.workspaceAudit=[...(snapshot.workspaceAudit??[]),{commandId:`redo-${Date.now()}`,intent:"redo_workspace",proposedChanges:["重做上一次撤销的配置"],status:"applied" as const,createdAt:new Date().toISOString(),confirmedAt:new Date().toISOString()}].slice(-200);
+  await writeUserSnapshot(snapshot);
+  return {status:"restored",workspace:restored,can_redo:snapshot.workspaceRedoVersions.some((item)=>item.workspace.id===targetId),can_undo:true};
+}
+
+export async function exportAssistantWorkspace(workspaceId?:string){
+  const {snapshot,workspaces,activeWorkspace}=await snapshotOrDefault();
+  const workspace=workspaces.find((item)=>item.id===workspaceId)??activeWorkspace;
+  return {schema_version:"anxin-workspace-v1",exported_at:new Date().toISOString(),workspace,preferences:snapshot.exploratoryPreferences??null,disclaimer:"配置只包含工作台布局、流程和已确认偏好，不包含 API Key、交易账户或身份资料。"};
 }
 
 export async function assistantSessionSummary() {
-  const { activeWorkspace } = await snapshotOrDefault();
+  const { activeWorkspace, snapshot } = await snapshotOrDefault();
   const { providers } = await readProviderState();
   return {
     session_id: `session_${crypto.randomUUID()}`,
     workspace_id: activeWorkspace.id,
+    can_undo:snapshot.workspaceVersions?.some((item)=>item.workspace.id===activeWorkspace.id)??false,
+    can_redo:snapshot.workspaceRedoVersions?.some((item)=>item.workspace.id===activeWorkspace.id)??false,
     providers: providers.map((provider) => { const safe={...provider} as Partial<ServerAIProviderProfile>; delete safe.apiKey; return {...safe,available:provider.enabled&&provider.secretStatus!=="missing"}; }),
     default_provider_id: providers.find((provider) => provider.isDefault)?.providerId ?? "mock",
   };

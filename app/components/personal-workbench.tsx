@@ -50,6 +50,7 @@ const normalizeWorkspace = (workspace: Workspace): Workspace => ({
   explanationLevel: workspace.explanationLevel ?? "beginner", preferredAssets: workspace.preferredAssets ?? [], preferredSectors: workspace.preferredSectors ?? [],
   alertFrequency: workspace.alertFrequency === ("realtime" as Workspace["alertFrequency"]) ? "event_based" : workspace.alertFrequency,
   theme: workspace.theme ?? DEFAULT_THEME,
+  workflow: workspace.workflow ?? ["research", "review_risk", "confirm_next_step"],
   modules: workspace.modules.map((module) => ({ ...module, type: (module.type as string) === "technical_trend" ? "technical_chart" : module.type })),
 });
 

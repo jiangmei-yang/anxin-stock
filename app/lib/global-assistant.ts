@@ -1,4 +1,4 @@
-import type { Workspace, WorkspaceChangePreview } from "./personal-workbench";
+import type { ExploratoryGoal, ModuleType, UserStage, Workspace, WorkspaceChangePreview, WorkspacePatchOperation, WorkspaceRecommendation, WorkspaceWorkflowStep } from "./personal-workbench";
 
 export type AssistantMessageType =
   | "user_message"
@@ -17,16 +17,26 @@ export type AssistantMessage = {
   content: string;
   createdAt: string;
   preview?: AssistantCommandPreview;
-  action?: "undo";
+  action?: "undo" | "redo";
+  toolUsed?: string | null;
+  modelUsed?: string;
 };
 
 export type AssistantCommandPreview = {
   commandId: string;
   workspaceId: string;
+  type: "workspace_patch" | "workspace_recommendation";
+  patch: WorkspacePatchOperation[];
+  summary: string;
+  affectedModules: ModuleType[];
   changes: string[];
   warnings: string[];
   questions: string[];
   proposedWorkspace?: Workspace;
+  recommendation?: WorkspaceRecommendation;
+  userStage?: UserStage;
+  goal?: ExploratoryGoal;
+  workflow?: WorkspaceWorkflowStep[];
   requiresConfirmation: true;
 };
 
@@ -60,6 +70,8 @@ export type AssistantSessionState = {
   unreadCount: number;
   selectedProvider: string;
   sessionId: string;
+  canUndo: boolean;
+  canRedo: boolean;
 };
 
 export const ASSISTANT_SESSION_KEY = "anxin.globalAssistant.v1";
@@ -67,7 +79,7 @@ export const ASSISTANT_SESSION_KEY = "anxin.globalAssistant.v1";
 export const WELCOME_MESSAGE: AssistantMessage = {
   id: "welcome",
   type: "assistant_message",
-  content: "告诉我你正在研究什么。我可以先查公开资料、计算组合影响，或把一条市场说法拆成待核实的问题；不会替你下单。",
+  content: "你不需要一开始就知道看什么。告诉我你的目标、时间或困惑，我会先推荐一个工作台；所有变化都要经你确认。",
   createdAt: new Date(0).toISOString(),
 };
 
@@ -105,6 +117,8 @@ export function createAssistantSession(): AssistantSessionState {
     pendingPreview: null,
     unreadCount: 0,
     selectedProvider: "mock",
+    canUndo: false,
+    canRedo: false,
     sessionId: `session_${crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)}`,
   };
 }
@@ -113,10 +127,18 @@ export function toCommandPreview(commandId: string, workspaceId: string, preview
   return {
     commandId,
     workspaceId,
+    type: preview.recommendation ? "workspace_recommendation" : "workspace_patch",
+    patch: preview.patch,
+    summary: preview.summary,
+    affectedModules: preview.affectedModules,
     changes: preview.changes,
     warnings: preview.warnings,
     questions: preview.questions,
     proposedWorkspace: preview.preview,
+    recommendation: preview.recommendation,
+    userStage: preview.recommendation?.userStage,
+    goal: preview.recommendation?.goal,
+    workflow: preview.preview.workflow,
     requiresConfirmation: true,
   };
 }
@@ -124,7 +146,7 @@ export function toCommandPreview(commandId: string, workspaceId: string, preview
 export function isConfigurationRequest(message: string) {
   const source = message.replace(/K\s*线/gi, "K线");
   if (/(解释|为什么|是什么|怎么看|分析).*(风险|指标|亏损|暴露|估值|回撤|波动)/.test(source)) return false;
-  return /(工作台|界面|主题|浅色|深色|高对比|字体|大字|提醒|简洁|专业|白话|隐藏|显示|增加|添加|移到|顶部|K线|财报|ETF.*配置|恢复默认)/i.test(source);
+  return /(工作台|界面|主题|浅色|深色|高对比|字体|大字|提醒|简洁|专业|白话|隐藏|显示|增加|添加|删除|移动|移到|顶部|放大|缩小|K线|财报|ETF.*配置|恢复默认|想挣钱|小白|新手|不知道.*看什么|不知道.*适合|帮我安排|没时间|只想学习|先模拟|已经有持仓|社交平台影响|先做风险检查|自动生成报告|重复暴露)/i.test(source);
 }
 
 export function safeContextPayload(context: AssistantPageContext, workspaceId: string, pendingCommandId: string | null) {
