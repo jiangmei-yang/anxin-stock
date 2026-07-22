@@ -14,20 +14,49 @@ async function render(path = "/", init = {}) {
   );
 }
 
-test("server-renders the decision workbench", async () => {
+test("server-renders the personal investment workbench", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>安心看股 · 决策工作台<\/title>/i);
-  assert.match(html, /现在先处理/);
-  assert.match(html, /先导入持仓，工作台才知道哪些变化与你有关/);
-  assert.match(html, /与你有关的变化/);
-  assert.match(html, /组合暴露/);
-  assert.match(html, /导入持仓/);
-  assert.match(html, /aria-label="主导航"/);
+  assert.match(html, /<title>安心看股 · 个人投资工作台<\/title>/i);
+  assert.match(html, /今天先做什么/);
+  assert.match(html, /我看到一个机会/);
+  assert.match(html, /我的投资规则/);
+  assert.match(html, /看看我的组合/);
+  assert.match(html, /个人投资工作台/);
+  assert.match(html, /aria-label="工作台导航"/);
   assert.match(html, /id="main-content"/);
+  assert.match(html, /data-theme="light_quiet"/);
+  assert.match(html, /安静浅色/);
+});
+
+test("keeps theme, local signal evidence, and four-step precheck in the workbench source", async () => {
+  const [component, logic, css] = await Promise.all([
+    readFile(new URL("../app/components/personal-workbench.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/personal-workbench.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(component, /原文中的具体信号/);
+  assert.match(component, /交易前四步核对/);
+  assert.match(component, /行业暴露可展开核对/);
+  assert.match(component, /不代表必须卖出/);
+  assert.match(logic, /themeId: "light_quiet"/);
+  assert.match(logic, /category: "时间压力"/);
+  assert.match(css, /data-theme="dark_focus"/);
+  assert.match(css, /data-motion="reduced"/);
+  assert.match(css, /prefers-reduced-motion:\s*reduce/);
+});
+
+test("server-renders privacy-preserving AI model settings", async () => {
+  const response = await render("/ai-settings");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /AI 模型设置/);
+  assert.match(html, /服务器端密钥/);
+  assert.match(html, /本地规则模式/);
+  assert.doesNotMatch(html, /sk-[a-zA-Z0-9]/);
 });
 
 test("runs privacy-preserving trade attribution without a Python backend", async () => {
@@ -44,6 +73,29 @@ test("runs privacy-preserving trade attribution without a Python backend", async
   assert.equal(body.attribution.positions[0].net_quantity, 6);
   assert.equal(body.attribution.realized_pnl, 38.6);
   assert.match(body.data_status.notice, /未保存 CSV/);
+});
+
+test("runs deterministic quant verification only after explicit confirmation", async () => {
+  const parsed = await render("/api/quant/parse", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ stockCode: "600183", question: "业绩增长、估值不高的股票，之后三个月通常表现怎么样？" }),
+  });
+  assert.equal(parsed.status, 200);
+  const parseBody = await parsed.json();
+  assert.equal(parseBody.parserMode, "local");
+  assert.equal(parseBody.hypothesis.confirmedAt, undefined);
+  const blocked = await render("/api/quant/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ hypothesis: parseBody.hypothesis }) });
+  assert.equal(blocked.status, 409);
+  parseBody.hypothesis.confirmedAt = "2026-07-22T10:00:00.000Z";
+  const run = await render("/api/quant/run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ hypothesis: parseBody.hypothesis }) });
+  assert.equal(run.status, 200);
+  const runBody = await run.json();
+  assert.equal(runBody.result.dataMode, "demo");
+  assert.equal(runBody.result.engineVersion, "quant-demo-1.0.0");
+  assert.ok(runBody.result.inSampleMetrics.sampleCount > 0);
+  assert.ok(runBody.result.outOfSampleMetrics.sampleCount > 0);
+  assert.match(runBody.result.conclusion, /提供有限支持|削弱当前判断|证据不足/);
 });
 
 test("server-renders native ETF and trade review workspaces", async () => {
@@ -130,6 +182,12 @@ test("keeps the daily workflow and decision loop in the product source", async (
   assert.match(page, /价格与事件/);
   assert.match(page, /财报体检/);
   assert.match(page, /研究一个具体问题/);
+  assert.match(page, /定量核实/);
+  assert.match(page, /确认检验条件/);
+  assert.match(page, /带入决策验证/);
+  assert.match(page, /历史检验只描述过去样本/);
+  assert.match(page, /quantVerification/);
+  assert.match(page, /最大允许历史回撤/);
   assert.match(page, /输入你想核实的说法、新闻或财务问题/);
   assert.match(page, /encodeURIComponent\(submittedQuery\)/);
   assert.match(page, /证据链/);

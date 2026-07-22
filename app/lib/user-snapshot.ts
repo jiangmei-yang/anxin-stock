@@ -3,8 +3,17 @@ import { getChatGPTUser } from "../chatgpt-auth";
 export type UserSnapshot = {
   rules?: unknown;
   holdings?: unknown;
+  watched?: unknown;
   decisionRecords?: unknown;
   latestDecision?: unknown;
+  quantVerifications?: unknown;
+  investorProfile?: unknown;
+  investmentRules?: unknown;
+  workspaces?: unknown;
+  activeWorkspaceId?: unknown;
+  opportunityChecks?: unknown;
+  workspaceVersions?: unknown;
+  workspaceAudit?: unknown;
   savedAt?: string;
 };
 

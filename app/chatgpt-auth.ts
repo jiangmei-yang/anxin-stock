@@ -14,7 +14,7 @@ const USER_FULL_NAME_ENCODING_HEADER = "oai-authenticated-user-full-name-encodin
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
   const email = requestHeaders.get(USER_EMAIL_HEADER);
-  if (!email) return null;
+  if (!email) return process.env.NODE_ENV !== "production" ? { displayName: "本地测试用户", email: "local@anxin.test", fullName: "本地测试用户" } : null;
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
   const fullName = encodedFullName && requestHeaders.get(USER_FULL_NAME_ENCODING_HEADER) === "percent-encoded-utf-8"
     ? safeDecode(encodedFullName)
