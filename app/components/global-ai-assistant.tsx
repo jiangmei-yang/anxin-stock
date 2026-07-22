@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   CircleAlert,
+  Cpu,
   History,
   MessageSquareText,
   PanelRightClose,
@@ -43,10 +44,10 @@ type AssistantContextValue = {
 const AssistantContext = createContext<AssistantContextValue | null>(null);
 
 const quickActions = [
-  { label: "创建我的工作台", prompt: "给我创建一个适合新手的投资工作台" },
-  { label: "设置浅色主题", prompt: "设置清透蓝浅色主题" },
-  { label: "分析我的持仓", prompt: "解释当前组合最需要核对的风险" },
-  { label: "我看到一个机会", href: "/opportunity" },
+  { label: "帮我配置工作台", prompt: "给我创建一个适合新手的投资工作台" },
+  { label: "检查我的持仓", prompt: "检查当前持仓最需要核对的集中度和行业暴露" },
+  { label: "分析这只 ETF", prompt: "分析 ETF 510300 的公开持仓与重复暴露" },
+  { label: "我看到一条推荐", href: "/opportunity" },
 ];
 
 const nowId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -59,6 +60,7 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
     { providerId: "mock", displayName: "本地规则模式", enabled: true, isDefault: true, secretStatus: "not_required" },
   ]);
   const [sending, setSending] = useState(false);
+  const [providerMenuOpen, setProviderMenuOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const messageEndRef = useRef<HTMLDivElement>(null);
   const context = useMemo(() => pageContextFor(pathname), [pathname]);
@@ -85,9 +87,11 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
   }, [pathname]);
 
   useEffect(() => {
-    fetch("/assistant/session", { cache: "no-store" }).then(async (response) => {
+    let active=true;
+    const loadProviders=()=>fetch("/assistant/session", { cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("unavailable");
       const payload = await response.json() as { session_id?: string; workspace_id?: string; providers?: AssistantProvider[]; default_provider_id?: string };
+      if (!active) return;
       if (payload.providers?.length) setProviders(payload.providers);
       setState((current) => ({
         ...current,
@@ -98,6 +102,9 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
           : payload.default_provider_id || "mock",
       }));
     }).catch(() => undefined);
+    void loadProviders();
+    window.addEventListener("anxin:providers-updated",loadProviders);
+    return()=>{active=false;window.removeEventListener("anxin:providers-updated",loadProviders)};
   }, []);
 
   useEffect(() => {
@@ -130,22 +137,24 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
           route: pathname,
           context: safeContextPayload(context, state.currentWorkspaceId, state.pendingPreview?.commandId ?? null),
           selected_provider: state.selectedProvider,
+          history: state.messages.filter((item) => item.type === "user_message" || item.type === "assistant_message" || item.type === "analysis").slice(-10).map((item) => ({ role:item.type === "user_message" ? "user" : "assistant", content:item.content })),
         }),
       });
-      const payload = await response.json() as { message?: { type?: AssistantMessage["type"]; content?: string; preview?: AssistantCommandPreview }; model_used?: string; session_id?: string };
-      if (!response.ok) throw new Error(payload.message?.content || "助手暂时没有响应");
+      const payload = await response.json() as { type?:AssistantMessage["type"];content?:string;message?: { type?: AssistantMessage["type"]; content?: string; preview?: AssistantCommandPreview }; preview?:AssistantCommandPreview;model_used?: string; provider_id?:string;session_id?: string };
+      if (!response.ok) throw new Error(payload.content || payload.message?.content || "助手暂时没有响应");
       appendMessage({
         id: nowId("assistant"),
-        type: payload.message?.type ?? "assistant_message",
-        content: payload.message?.content || "已收到。",
-        preview: payload.message?.preview,
+        type: payload.type ?? payload.message?.type ?? "assistant_message",
+        content: payload.content || payload.message?.content || "已收到。",
+        preview: payload.preview ?? payload.message?.preview,
         createdAt: new Date().toISOString(),
       });
+      if (payload.provider_id) setState((current) => ({ ...current, selectedProvider:payload.provider_id! }));
       if (payload.session_id) setState((current) => ({ ...current, sessionId: payload.session_id! }));
     } catch (error) {
       appendMessage({ id: nowId("error"), type: "error_message", content: error instanceof Error ? error.message : "助手暂时不可用，请稍后再试。", createdAt: new Date().toISOString() });
     } finally { setSending(false); }
-  }, [appendMessage, context, pathname, sending, state.currentWorkspaceId, state.draft, state.pendingPreview, state.selectedProvider, state.sessionId]);
+  }, [appendMessage, context, pathname, sending, state.currentWorkspaceId, state.draft, state.messages, state.pendingPreview, state.selectedProvider, state.sessionId]);
 
   const confirmPreview = async (preview: AssistantCommandPreview) => {
     setSending(true);
@@ -198,6 +207,7 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
   const setOpen = (open: boolean) => setState((current) => ({ ...current, open, unreadCount: open ? 0 : current.unreadCount }));
   const value = useMemo<AssistantContextValue>(() => ({ state, setOpen, setDraft: (draft) => setState((current) => ({ ...current, draft })), send }), [send, state]);
   const availableProviders = providers.filter((provider) => provider.enabled);
+  const currentProvider = providers.find((provider) => provider.providerId === state.selectedProvider) ?? providers.find((provider) => provider.isDefault) ?? providers[0];
 
   return (
     <AssistantContext.Provider value={value}>
@@ -209,13 +219,19 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
             <Button variant="ghost" size="icon" onClick={() => setOpen(false)} aria-label="收起 AI 助手"><PanelRightClose /></Button>
           </header>
 
+          <section className="assistant-model-bar" aria-label="当前 AI 模型">
+            <div><Cpu /><span><small>当前模型</small><strong>{currentProvider?.displayName ?? "未连接"}</strong></span><Badge variant={currentProvider?.connectionStatus === "available" || currentProvider?.secretStatus === "not_required" ? "secondary" : "outline"}>{currentProvider?.providerId === "mock" ? "自由对话未启用" : currentProvider?.connectionStatus === "available" ? "已连接" : "需要配置"}</Badge></div>
+            <Button variant="outline" size="sm" onClick={() => setProviderMenuOpen((open) => !open)}>{currentProvider?.providerId === "mock" ? "接入真实模型" : "切换"}<ChevronDown data-icon="inline-end" /></Button>
+          </section>
+
+          {providerMenuOpen && <section className="assistant-provider-menu" aria-label="切换 AI 模型">
+            {availableProviders.map((provider) => <button key={provider.providerId} type="button" disabled={provider.secretStatus === "missing"} className={provider.providerId === state.selectedProvider ? "active" : undefined} onClick={() => { setState((current) => ({ ...current, selectedProvider:provider.providerId })); setProviderMenuOpen(false); }}><span><strong>{provider.displayName}</strong><small>{provider.model || (provider.providerId === "mock" ? "确定性规则" : "尚未配置")}</small></span><i>{provider.providerId === state.selectedProvider ? <Check /> : provider.secretStatus === "missing" ? "未接入" : "可用"}</i></button>)}
+            <Button variant="outline" size="sm" onClick={() => { setProviderMenuOpen(false); setOpen(false); router.push("/ai-settings"); }}>管理或接入模型<ChevronRight data-icon="inline-end" /></Button>
+          </section>}
+
           <div className="assistant-context-bar">
             <div><span>当前</span><strong>{context.label}</strong></div>
-            <label><span className="sr-only">选择 AI 模型</span><Sparkles />
-              <select value={state.selectedProvider} onChange={(event) => setState((current) => ({ ...current, selectedProvider: event.target.value }))} aria-label="当前 AI 模型">
-                {availableProviders.map((provider) => <option key={provider.providerId} value={provider.providerId} disabled={provider.secretStatus === "missing"}>{provider.displayName}{provider.secretStatus === "missing" ? "（未配置）" : ""}</option>)}
-              </select><ChevronDown />
-            </label>
+            <span>{currentProvider?.model || "规则计算"}</span>
           </div>
 
           <div className="assistant-messages" role="log" aria-live="polite" aria-label="AI 助手对话记录">
@@ -232,7 +248,7 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
                 </div>
               </article>
             ))}
-            {sending && <article className="assistant-message system_status"><span className="assistant-message-icon"><Sparkles /></span><div><p>正在整理，不会在确认前修改页面…</p></div></article>}
+            {sending && <article className="assistant-message system_status"><span className="assistant-message-icon"><Sparkles /></span><div><p>正在理解你的问题……</p></div></article>}
             <div ref={messageEndRef} />
           </div>
 

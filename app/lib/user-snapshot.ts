@@ -21,14 +21,14 @@ export type UserSnapshot = {
 
 type D1Result<T> = { results?: T[] };
 
-async function database() {
+export async function getUserDatabase() {
   const { env } = await import("cloudflare:workers");
   const binding = (env as unknown as { DB?: D1Database }).DB;
   if (!binding) throw new Error("云端个人数据存储尚未配置");
   return binding;
 }
 
-async function ownerKey() {
+export async function authenticatedOwnerKey() {
   const user = await getChatGPTUser();
   if (!user) return null;
   const bytes = new TextEncoder().encode(user.email.trim().toLowerCase());
@@ -45,9 +45,9 @@ async function ensureTable(db: D1Database) {
 }
 
 export async function readUserSnapshot() {
-  const owner = await ownerKey();
+  const owner = await authenticatedOwnerKey();
   if (!owner) return { status: "unauthorized" as const };
-  const db = await database();
+  const db = await getUserDatabase();
   await ensureTable(db);
   const row = await db.prepare("SELECT payload, updated_at FROM user_snapshots WHERE owner_key = ?")
     .bind(owner).all() as D1Result<{ payload: string; updated_at: string }>;
@@ -57,9 +57,9 @@ export async function readUserSnapshot() {
 }
 
 export async function writeUserSnapshot(snapshot: UserSnapshot) {
-  const owner = await ownerKey();
+  const owner = await authenticatedOwnerKey();
   if (!owner) return { status: "unauthorized" as const };
-  const db = await database();
+  const db = await getUserDatabase();
   await ensureTable(db);
   const updatedAt = new Date().toISOString();
   const payload = JSON.stringify({ ...snapshot, savedAt: updatedAt });
@@ -72,9 +72,9 @@ export async function writeUserSnapshot(snapshot: UserSnapshot) {
 }
 
 export async function deleteUserSnapshot() {
-  const owner = await ownerKey();
+  const owner = await authenticatedOwnerKey();
   if (!owner) return { status: "unauthorized" as const };
-  const db = await database();
+  const db = await getUserDatabase();
   await ensureTable(db);
   await db.prepare("DELETE FROM user_snapshots WHERE owner_key = ?").bind(owner).run();
   return { status: "deleted" as const };

@@ -6,7 +6,9 @@ import {
   type Workspace,
 } from "./personal-workbench";
 import { isConfigurationRequest, pageContextFor, toCommandPreview } from "./global-assistant";
-import { providerKey, providersForSnapshot, type AIProviderProfile } from "./ai-provider-catalog";
+import { callAIProvider, readProviderState, type AIProviderProfile, type ServerAIProviderProfile } from "./ai-provider-catalog";
+import { diagnosePublicEtfs } from "./etf-public";
+import { parseQuantQuestion } from "./quant-verification";
 
 type StoredCommand = {
   commandId: string;
@@ -47,42 +49,55 @@ async function snapshotOrDefault() {
   return { snapshot, workspaces, activeWorkspace };
 }
 
-function selectedModel(snapshot: AssistantSnapshot, requested?: string) {
-  const providers = providersForSnapshot(snapshot);
-  const selected = providers.find((item) => item.providerId === requested && item.enabled && item.secretStatus !== "missing")
-    ?? providers.find((item) => item.isDefault && item.enabled && item.secretStatus !== "missing");
-  return selected?.providerId ?? "mock";
+const ASSISTANT_SYSTEM_PROMPT = `你是安心看股的个人投资工作台助手。
+你可以自然回答投资研究问题，理解自然语言，解释 ETF、持仓、财报、估值、风险和社交平台内容，也可以调用系统提供的确定性工具。
+你不能执行买入、卖出、下单或自动调仓，不能预测未来涨跌、承诺收益、编造行情财报估值或把缺失数据当成事实。
+工作台修改必须先生成预览并等待确认；投资规则和风险上限不得静默修改。
+涉及数据时只能使用工具结果，并说明数据日期与状态；数据不足时写“暂无数据”。
+不要索取或输出 API Key、券商密码、身份证、银行卡或验证码。回答自然、具体、有上下文，不要重复固定欢迎语。`;
+
+type ConversationTurn = { role:"user"|"assistant"; content:string };
+
+function responsePayload(input: {
+  sessionId:string; type:"assistant_message"|"config_preview"|"analysis"|"clarification"|"error_message"|"risk_alert";
+  content:string; intent:string; provider:ServerAIProviderProfile; preview?:ReturnType<typeof toCommandPreview>;
+  toolUsed?:string|null; data?:unknown; suggestedActions?:string[]; requiresConfirmation?:boolean; fallbackAvailable?:boolean;
+}) {
+  const result = {
+    session_id:input.sessionId,type:input.type,content:input.content,intent:input.intent,
+    model_used:input.provider.model,provider_id:input.provider.providerId,tool_used:input.toolUsed??null,
+    preview:input.preview??null,data:input.data??null,suggested_actions:input.suggestedActions??[],
+    requires_confirmation:input.requiresConfirmation??false,fallback_available:input.fallbackAvailable??false,
+    disclaimer:"本工具仅用于投资研究与风险检查，不构成投资建议、收益承诺或买卖建议。",
+  };
+  return {...result,message:{type:input.type,content:input.content,preview:input.preview}};
 }
 
-async function configuredModelExplanation(snapshot: AssistantSnapshot, providerId: string, pageLabel: string, message: string) {
-  if (providerId === "mock") return null;
-  const provider = providersForSnapshot(snapshot).find((item) => item.providerId === providerId);
-  if (!provider || provider.secretStatus === "missing" || !provider.enabled) return null;
-  const baseUrl = (provider.baseUrl || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-  const model = provider.model || process.env.AI_MODEL || "gpt-4.1-mini";
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
-  try {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      signal: controller.signal,
-      headers: { "content-type": "application/json", authorization: `Bearer ${providerKey(providerId)}` },
-      body: JSON.stringify({
-        model,
-        temperature: 0.2,
-        max_tokens: 260,
-        messages: [
-          { role: "system", content: "你是安心看股的投资决策辅助助手。只解释提供的信息，不预测涨跌，不给买卖指令，不承诺收益。数据不足时明确说明。回答简洁、具体、中文。" },
-          { role: "user", content: `当前页面：${pageLabel}\n用户问题：${message.slice(0, 1200)}\n不要索取或输出 API Key、券商密码、身份证、银行卡或验证码。` },
-        ],
-      }),
-    });
-    if (!response.ok) return null;
-    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-    const content = payload.choices?.[0]?.message?.content?.trim();
-    return content ? { content, modelUsed: `${providerId}:${model}` } : null;
-  } catch { return null; }
-  finally { clearTimeout(timeout); }
+function portfolioTool(snapshot: AssistantSnapshot) {
+  const holdings = (snapshot.holdings && typeof snapshot.holdings === "object" ? snapshot.holdings : {}) as Record<string,{name?:string;value?:number;industry?:string}>;
+  const rows = Object.entries(holdings).map(([code,item])=>({code,name:item.name??code,value:Number(item.value??0),industry:item.industry??"行业待核对"})).filter((item)=>item.value>0);
+  const total = rows.reduce((sum,item)=>sum+item.value,0);
+  const weighted = rows.map((item)=>({...item,weight:total?item.value/total:0})).sort((left,right)=>right.weight-left.weight);
+  const sectors = Object.entries(rows.reduce<Record<string,number>>((result,item)=>({...result,[item.industry]:(result[item.industry]??0)+item.value}),{})).map(([industry,value])=>({industry,weight:total?value/total:0})).sort((left,right)=>right.weight-left.weight);
+  return {dataStatus:rows.length?"user_saved":"missing",calculatedAt:new Date().toISOString(),portfolioValue:total,positionCount:rows.length,largestPosition:weighted[0]??null,largestSector:sectors[0]??null,positions:weighted.slice(0,12)};
+}
+
+async function resolveTool(message:string,snapshot:AssistantSnapshot) {
+  if (/(持仓|组合|仓位|集中度|行业暴露)/.test(message)) return {intent:"portfolio_analysis",toolUsed:"get_portfolio_risk",data:portfolioTool(snapshot)};
+  if (/(量化|回测|历史检验|规则筛选)/.test(message)) {
+    const code=message.match(/\b\d{6}\b/)?.[0];
+    if(!code) return {intent:"quant_analysis",toolUsed:null,data:null,clarification:"请补充 6 位 A 股代码，以及你想核实的历史条件。"};
+    return {intent:"quant_analysis",toolUsed:"parse_quant_rule",data:{dataStatus:"candidate_only",hypothesis:parseQuantQuestion(message,code)}};
+  }
+  if (/ETF|基金/.test(message)) {
+    const code=message.match(/\b\d{6}\b/)?.[0];
+    if(!code) return {intent:"etf_analysis",toolUsed:null,data:null,clarification:"请补充 6 位 ETF 代码，我会先读取公开披露再解释。"};
+    const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),15_000);
+    try{return {intent:"etf_analysis",toolUsed:"diagnose_etf_holdings",data:await diagnosePublicEtfs([{code}],controller.signal)};}
+    catch{return {intent:"etf_analysis",toolUsed:"diagnose_etf_holdings",data:{dataStatus:"unavailable",code,message:"公开 ETF 持仓暂时不可用，没有使用演示数据代替。"}};}
+    finally{clearTimeout(timer);}
+  }
+  return {intent:"conversation",toolUsed:null,data:null};
 }
 
 export async function createAssistantPreview(message: string, workspaceId?: string) {
@@ -122,72 +137,46 @@ export async function handleAssistantMessage(input: {
   workspace_id?: string;
   route?: string;
   selected_provider?: string;
+  history?: ConversationTurn[];
 }) {
   const message = input.message.trim();
   if (!message) throw new Error("请先输入你想配置或了解的内容");
   const { snapshot, activeWorkspace } = await snapshotOrDefault();
   const route = input.route?.startsWith("/") ? input.route : "/";
   const context = pageContextFor(route);
-  let modelUsed = selectedModel(snapshot, input.selected_provider);
+  const providerState = await readProviderState();
+  const provider = providerState.providers.find((item)=>item.providerId===input.selected_provider&&item.enabled&&item.connectionStatus==="available")
+    ?? providerState.providers.find((item)=>item.isDefault&&item.enabled&&item.connectionStatus==="available")
+    ?? providerState.providers.find((item)=>item.providerId==="mock")!;
   const sessionId = input.session_id || `session_${crypto.randomUUID()}`;
 
   if (/(帮我|替我|自动).*(买入|卖出|下单|调仓)|^(买入|卖出)/.test(message)) {
-    return {
-      session_id: sessionId,
-      message: { type: "error_message", content: "我不能执行买卖、自动交易或调仓。我可以帮你检查计划后的仓位、理由和待核实信息。" },
-      model_used: modelUsed,
-    };
+    return responsePayload({sessionId,type:"risk_alert",content:"我不能执行买卖、自动交易或调仓。我可以把这笔计划带入交易前检查，核对仓位、理由和退出条件。",intent:"trade_execution_blocked",provider,suggestedActions:["进入交易前检查","检查计划后仓位"]});
   }
 
   if (isConfigurationRequest(message)) {
     const { parsed, commandId, current } = await createAssistantPreview(message, input.workspace_id || activeWorkspace.id);
     if (!parsed.canApply) {
-      return {
-        session_id: sessionId,
-        message: {
-          type: parsed.warnings.length ? "risk_alert" : "assistant_message",
-          content: parsed.warnings[0] || parsed.questions[0] || "我还不能确定要改什么，请补充模块、主题、信息密度或提醒频率。",
-        },
-        model_used: modelUsed,
-      };
+      return responsePayload({sessionId,type:parsed.warnings.length?"risk_alert":"clarification",content:parsed.warnings[0]||parsed.questions[0]||"请补充要修改的模块、主题、信息密度或提醒频率。",intent:"workspace_config",provider});
     }
-    return {
-      session_id: sessionId,
-      message: {
-        type: "config_preview",
-        content: "我整理了一份工作台配置变更。确认前，页面不会发生变化。",
-        preview: toCommandPreview(commandId, current.id, parsed),
-      },
-      model_used: modelUsed,
-    };
+    const preview=toCommandPreview(commandId,current.id,parsed);
+    return responsePayload({sessionId,type:"config_preview",content:"我整理了一份工作台配置变更，请确认。确认前，页面不会发生变化。",intent:"workspace_config",provider,preview,requiresConfirmation:true});
   }
-
-  const answers: Record<string, string> = {
-    etf: "ETF 重复暴露是指不同 ETF 持有相同或高度相似的底层股票。名称看起来分散，不代表风险来源分散。请先核对重合持仓、行业权重和披露日期。",
-    trade_review: "交易纪律要分开检查仓位、买入时点、交易频率、亏损后补仓和退出条件。盈亏结果本身不能证明当时的流程是否合理。",
-    opportunity: "我会先区分原文中的事实、推断、紧迫措辞和未核实信息，再检查它是否触发你的持仓或行为规则；不会根据热度预测涨跌。",
-    research: "单个指标需要结合历史区间、行业口径和数据日期理解。把你正在看的指标名称发给我，我会说明它反映什么、当前数据能说明什么，以及还缺什么。",
-    portfolio: "组合风险通常来自单一资产权重、行业集中和底层重复暴露。先看具体占比与个人上限，再判断风险来自仓位还是标的本身。",
-    rules: "个人规则是你提前设定的提醒边界，不是产品替你决定的风险承受能力。修改比例前，需要你在规则页再次确认。",
-    ai_settings: "模型只负责解释和组织语言；仓位、费用、收益与规则冲突仍由确定性代码计算。密钥只保存在服务器端，不会显示在对话或网页存储中。",
-    workspace: "你可以用一句话调整模块、排序、主题、解释难度和提醒频率。每次修改都会先生成预览，只有明确确认后才应用。",
-    home: "你可以从今天最需要处理的变化开始，也可以让我调整工作台、解释组合风险，或带你进入 ETF 诊断和交易前检查。",
-  };
-  const generated = await configuredModelExplanation(snapshot, modelUsed, context.label, message);
-  if (generated) {
-    modelUsed = generated.modelUsed;
-    return {
-      session_id: sessionId,
-      message: { type: "assistant_message", content: generated.content },
-      model_used: modelUsed,
-    };
+  const tool=await resolveTool(message,snapshot);
+  if(tool.clarification) return responsePayload({sessionId,type:"clarification",content:tool.clarification,intent:tool.intent,provider,suggestedActions:["补充代码","打开对应工具"]});
+  if(provider.providerId==="mock") {
+    if(tool.toolUsed) return responsePayload({sessionId,type:"analysis",content:`已完成确定性检查。${JSON.stringify(tool.data).slice(0,900)}`,intent:tool.intent,provider,toolUsed:tool.toolUsed,data:tool.data,suggestedActions:["查看计算口径","接入真实模型解释"]});
+    return responsePayload({sessionId,type:"error_message",content:"当前使用本地规则模式，AI 自由对话未启用。你仍可使用持仓、ETF 和量化的确定性检查，或接入真实模型。",intent:"conversation",provider,fallbackAvailable:true,suggestedActions:["接入真实模型","继续使用规则版结果"]});
   }
-  if (modelUsed !== "mock") modelUsed = "mock-fallback";
-  return {
-    session_id: sessionId,
-    message: { type: "assistant_message", content: answers[context.page] ?? answers.home },
-    model_used: modelUsed,
-  };
+  try {
+    const history=(input.history??[]).slice(-10).filter((item)=>item.content.trim()).map((item)=>({role:item.role,content:item.content.slice(0,1800)}));
+    const toolContext=tool.toolUsed?`\n系统工具：${tool.toolUsed}\n工具结果：${JSON.stringify(tool.data).slice(0,8000)}`:"";
+    const content=await callAIProvider(provider,[{role:"system",content:ASSISTANT_SYSTEM_PROMPT},...history,{role:"user",content:`当前页面：${context.label}\n用户问题：${message.slice(0,3000)}${toolContext}`}],650);
+    if(!content) throw new Error("empty");
+    return responsePayload({sessionId,type:tool.toolUsed?"analysis":"assistant_message",content,intent:tool.intent,provider,toolUsed:tool.toolUsed,data:tool.data,suggestedActions:tool.toolUsed?["查看计算口径","进入交易前检查"]:[]});
+  } catch {
+    return responsePayload({sessionId,type:"error_message",content:`${provider.displayName} 当前暂时不可用。`,intent:tool.intent,provider,toolUsed:tool.toolUsed,data:tool.data,fallbackAvailable:true,suggestedActions:["重试","切换模型","使用规则版结果"]});
+  }
 }
 
 export async function confirmAssistantCommand(commandId: string) {
@@ -233,12 +222,12 @@ export async function undoAssistantWorkspace(workspaceId?: string) {
 }
 
 export async function assistantSessionSummary() {
-  const { snapshot, activeWorkspace } = await snapshotOrDefault();
-  const providers = providersForSnapshot(snapshot);
+  const { activeWorkspace } = await snapshotOrDefault();
+  const { providers } = await readProviderState();
   return {
     session_id: `session_${crypto.randomUUID()}`,
     workspace_id: activeWorkspace.id,
-    providers: providers.map((provider) => ({ ...provider, available: provider.enabled && provider.secretStatus !== "missing" })),
+    providers: providers.map((provider) => { const safe={...provider} as Partial<ServerAIProviderProfile>; delete safe.apiKey; return {...safe,available:provider.enabled&&provider.secretStatus!=="missing"}; }),
     default_provider_id: providers.find((provider) => provider.isDefault)?.providerId ?? "mock",
   };
 }

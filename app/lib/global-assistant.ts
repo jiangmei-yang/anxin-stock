@@ -3,6 +3,8 @@ import type { Workspace, WorkspaceChangePreview } from "./personal-workbench";
 export type AssistantMessageType =
   | "user_message"
   | "assistant_message"
+  | "analysis"
+  | "clarification"
   | "system_status"
   | "config_preview"
   | "risk_alert"
@@ -36,6 +38,9 @@ export type AssistantProvider = {
   enabled: boolean;
   isDefault: boolean;
   secretStatus: "not_required" | "server_configured" | "missing";
+  connectionStatus?: "available" | "missing_configuration";
+  isPlatformDefault?: boolean;
+  description?: string;
 };
 
 export type AssistantPageContext = {

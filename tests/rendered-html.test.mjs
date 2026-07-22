@@ -67,12 +67,32 @@ test("keeps AI keys server-only and applies per-user provider priority", async (
   ]);
   assert.match(catalog, /providerId:"hkgai_main"/);
   assert.match(catalog, /snapshot\.aiDefaultProviderId/);
-  assert.match(catalog, /isPlatformDefault && item\.connectionStatus === "available"/);
-  assert.match(catalog, /providerId === "mock"/);
-  assert.match(catalog, /function toPublicProvider/);
-  assert.doesNotMatch(catalog.match(/function toPublicProvider[\s\S]*?\n}/)?.[0] ?? "", /baseUrl|providerKey|API_KEY/);
+  assert.match(catalog, /AES-GCM/);
+  assert.match(catalog, /AI_PROVIDER_ENCRYPTION_KEY/);
+  assert.match(catalog, /authenticatedOwnerKey/);
+  assert.match(catalog, /secret_cipher/);
+  assert.match(catalog, /delete publicProvider\.apiKey/);
   assert.match(snapshot, /aiDefaultProviderId\?: string/);
-  assert.match(settings, /个人选择 → 平台默认 HKGAI → Mock \/ 本地规则模式/);
+  assert.match(settings, /保存并设为默认/);
+  assert.match(settings, /Base URL/);
+  assert.match(settings, /type=\{showKey\?"text":"password"\}/);
+  assert.doesNotMatch(settings, /(?:localStorage|sessionStorage)\.setItem\([^\n]*apiKey/i);
+});
+
+test("routes assistant questions through deterministic tools before a real model", async () => {
+  const [server, route] = await Promise.all([
+    readFile(new URL("../app/lib/assistant-server.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/assistant/message/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(server, /callAIProvider/);
+  assert.match(server, /diagnosePublicEtfs/);
+  assert.match(server, /parseQuantQuestion/);
+  assert.match(server, /portfolioTool/);
+  assert.match(server, /tool_used/);
+  assert.match(server, /provider_id/);
+  assert.doesNotMatch(server, /const answers\s*=/);
+  assert.match(route, /history/);
+  assert.match(route, /slice\(-10\)/);
 });
 
 test("mounts one global AI assistant across every product route", async () => {
