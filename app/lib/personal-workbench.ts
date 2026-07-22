@@ -29,7 +29,8 @@ export type WorkspacePatchOperation =
   | { op: "set_alert_frequency"; frequency: Workspace["alertFrequency"] }
   | { op: "apply_template"; template: WorkspaceTemplateId }
   | { op: "restore_default" };
-export type WorkspaceRecommendation = { type: "workspace_recommendation"; userStage: UserStage; goal: ExploratoryGoal; recommendedTemplate: WorkspaceTemplateId; reason: string; modules: ModuleType[]; workflow: WorkspaceWorkflowStep[] };
+export type WorkspacePreferenceSignals = { holdingPeriod?:"short_term"|"medium_term"|"long_term"; lossComfort?:string; weeklyTime?:string; viewFrequency?:"daily"|"weekly"|"monthly"; focusSocialContent?:boolean; showTechnicalIndicators?:boolean };
+export type WorkspaceRecommendation = { type: "workspace_recommendation"; userStage: UserStage; goal: ExploratoryGoal; recommendedTemplate: WorkspaceTemplateId; reason: string; modules: ModuleType[]; workflow: WorkspaceWorkflowStep[]; preferences:WorkspacePreferenceSignals };
 export type WorkspaceChangePreview = { preview: Workspace; patch: WorkspacePatchOperation[]; summary: string; affectedModules: ModuleType[]; changes: string[]; warnings: string[]; questions: string[]; intent: string; canApply: boolean; needsConfirmation: true; recommendation?: WorkspaceRecommendation };
 export type WorkspaceTemplateId = "long_term" | "etf" | "active" | "beginner_safe_start" | "social_risk" | "trade_review" | "risk_control" | "custom";
 export type SocialSignal = { category: string; excerpt: string; detail: string };
@@ -112,7 +113,7 @@ export function createWorkspace(template: string | WorkspaceTemplateId = "long_t
   return { id: id("workspace"), name: selected.name, description: selected.description, strategy: selected.strategy, modules: selected.modules.map((type, order) => ({ type, order, visible: true, width: order === 0 ? "full" : "half", density: selected.density })), workflow: selected.workflow, alertFrequency: selected.alertFrequency, density: selected.density, explanationLevel: selected.explanation, preferredAssets: [], preferredSectors: [], theme: DEFAULT_THEME, updatedAt: now() };
 }
 
-export function classifyWorkspaceNeed(text: string): { stage: UserStage; goal: ExploratoryGoal; template: WorkspaceTemplateId; reason: string; questions: string[] } {
+export function classifyWorkspaceNeed(text: string): { stage: UserStage; goal: ExploratoryGoal; template: WorkspaceTemplateId; reason: string; questions: string[]; preferences:WorkspacePreferenceSignals } {
   const source = text.trim();
   let stage: UserStage = "unknown"; let goal: ExploratoryGoal = "unknown"; let template: WorkspaceTemplateId = "custom";
   if (/(小白|新手|不知道.*开始|不知道.*看什么|想挣钱)/.test(source)) { stage = "beginner"; goal = "learn_and_start"; template = "beginner_safe_start"; }
@@ -131,7 +132,17 @@ export function classifyWorkspaceNeed(text: string): { stage: UserStage; goal: E
   if (!/(亏损|回撤|风险|承受)/.test(source)) questions.push("出现多大幅度的亏损时，你会明显不安并希望收到提醒？");
   if (!/(没时间|每天|每周|小时|分钟)/.test(source)) questions.push("你每周大约愿意花多少时间查看和复核？");
   const reasons: Record<WorkspaceTemplateId, string> = { beginner_safe_start: "你目前更需要建立可理解、可模拟的基本流程，而不是立即面对大量行情和交易入口。", etf: "ETF 的关键不是名称，而是底层持仓、行业暴露和不同产品之间的重合。", long_term: "长期方式更适合把经营质量、估值和定期复核放在同一条流程中。", active: "更频繁的交易需要先检查仓位和退出条件，再看技术信号。", social_risk: "社交内容需要先拆分事实、传闻和紧迫措辞，再评估是否影响现有持仓。", trade_review: "复盘价值来自把交易事实、行为模式和下一次检查项连接起来。", risk_control: "风险优先时应先看集中度、回撤和流动性，而不是增加更多行情噪音。", custom: "信息还不足，先保留当前工作台并询问少量关键问题。" };
-  return { stage, goal, template, reason: reasons[template], questions: questions.slice(0, 3) };
+  const lossMatch=source.match(/(?:承受|接受|回撤|亏损)[^\d]{0,8}(\d+(?:\.\d+)?)\s*%/);
+  const timeMatch=source.match(/每周[^\d]{0,8}(\d+(?:\.\d+)?)\s*(分钟|小时)/);
+  const preferences:WorkspacePreferenceSignals={
+    holdingPeriod:/(长期|一年以上)/.test(source)?"long_term":/(短期|几周)/.test(source)?"short_term":/(几个月|中期)/.test(source)?"medium_term":undefined,
+    lossComfort:lossMatch?`${lossMatch[1]}%`:undefined,
+    weeklyTime:timeMatch?`${timeMatch[1]}${timeMatch[2]}`:undefined,
+    viewFrequency:/(每周|没时间|不看盘)/.test(source)?"weekly":/(每天|每日)/.test(source)?"daily":/(每月)/.test(source)?"monthly":undefined,
+    focusSocialContent:/(小红书|社交平台|群里|跟风)/.test(source)||undefined,
+    showTechnicalIndicators:/(不要|隐藏|不看).*(技术|K线)/.test(source)?false:/(需要|显示|关注).*(技术|K线)/.test(source)?true:undefined,
+  };
+  return { stage, goal, template, reason: reasons[template], questions: questions.slice(0, 3), preferences };
 }
 
 export function previewWorkspaceChange(workspace: Workspace, rawInstruction: string): WorkspaceChangePreview {
@@ -150,7 +161,7 @@ export function previewWorkspaceChange(workspace: Workspace, rawInstruction: str
   if (instruction.includes("恢复默认")) { const reset = createWorkspace("long_term"); preview = { ...reset, id: workspace.id }; changes.push("恢复长期投资默认布局"); patch.push({ op: "restore_default" }); preview.modules.forEach((item)=>affected.add(item.type)); return finish("reset_workspace"); }
 
   const need = classifyWorkspaceNeed(instruction);
-  const fuzzyRequest = /(想挣钱|小白|新手|不知道.*看什么|不知道.*适合|帮我安排|没时间|只想学习|先模拟|已经有持仓|社交平台影响|(创建|新建).*(ETF|长期|复盘|风险).*工作台)/i.test(instruction);
+  const fuzzyRequest = /(想挣钱|小白|新手|不知道.*看什么|不知道.*适合|帮我安排|没时间|只想学习|学习模式|先模拟|已经有持仓|持仓复盘|社交平台影响|只.*ETF|(创建|新建).*(ETF|长期|复盘|风险).*工作台)/i.test(instruction);
   if (fuzzyRequest) {
     const candidate = createWorkspace(need.template);
     preview = { ...candidate, id: workspace.id };
@@ -158,9 +169,10 @@ export function previewWorkspaceChange(workspace: Workspace, rawInstruction: str
     changes.push(`应用“${candidate.name}”`, `工作流程调整为：${preview.workflow.map((item)=>WORKFLOW_LABELS[item]).join(" → ")}`);
     patch.push({ op: "apply_template", template: need.template }, { op: "set_workflow", workflow: preview.workflow });
     preview.modules.forEach((item)=>affected.add(item.type)); questions = need.questions;
-    const recommendation: WorkspaceRecommendation = { type:"workspace_recommendation", userStage:need.stage, goal:need.goal, recommendedTemplate:need.template, reason:need.reason, modules:preview.modules.map((item)=>item.type), workflow:preview.workflow };
+    const recommendation: WorkspaceRecommendation = { type:"workspace_recommendation", userStage:need.stage, goal:need.goal, recommendedTemplate:need.template, reason:need.reason, modules:preview.modules.map((item)=>item.type), workflow:preview.workflow, preferences:need.preferences };
     return finish("workspace_recommendation", recommendation);
   }
+  if(/忘记.*短线/.test(instruction)){preview.strategy="custom";preview.modules.forEach((item)=>{if(["technical_chart","technical_signals"].includes(item.type)){item.visible=false;affected.add(item.type);patch.push({op:"set_visibility",module:item.type,visible:false});}});preview.workflow=["research","review_risk","confirm_next_step"];patch.push({op:"set_workflow",workflow:preview.workflow});changes.push("关闭短线技术模块并恢复通用风险复核流程");}
   if (/主要做|主要配置|关注/.test(instruction) && /ETF/i.test(instruction)) { preview.strategy = "etf_allocation"; preview.preferredAssets = ["ETF"]; changes.push("投资模式调整为 ETF 配置"); }
   const sectors = ["科技", "医药", "消费", "金融", "新能源", "半导体", "人工智能", "红利"].filter((item) => instruction.includes(item));
   if (sectors.length) { preview.preferredSectors = sectors; changes.push(`关注行业调整为${sectors.join("、")}`); }

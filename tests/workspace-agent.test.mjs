@@ -61,6 +61,16 @@ test("builds a separate saved workspace preview from a named template", () => {
   assert.equal(result.needsConfirmation, true);
 });
 
+test("keeps explicitly confirmed preference signals and supports later mode changes", () => {
+  const need=workspace.classifyWorkspaceNeed("我是新手，想长期持有，最多接受 12% 亏损，每周看 30 分钟，也会看小红书");
+  assert.equal(need.preferences.holdingPeriod,"long_term");
+  assert.equal(need.preferences.lossComfort,"12%");
+  assert.equal(need.preferences.weeklyTime,"30分钟");
+  assert.equal(need.preferences.focusSocialContent,true);
+  assert.equal(workspace.previewWorkspaceChange(workspace.createWorkspace("active"),"忘记我的短线模式").canApply,true);
+  assert.equal(workspace.previewWorkspaceChange(workspace.createWorkspace("custom"),"以后只给我 ETF 相关内容").recommendation.recommendedTemplate,"etf");
+});
+
 test("keeps workspace state user-owned, durable, confirmable, undoable and redoable", async () => {
   const [snapshot, server, confirmRoute] = await Promise.all([
     readFile(new URL("../app/lib/user-snapshot.ts", import.meta.url), "utf8"),

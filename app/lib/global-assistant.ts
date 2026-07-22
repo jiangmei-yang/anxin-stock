@@ -146,7 +146,7 @@ export function toCommandPreview(commandId: string, workspaceId: string, preview
 export function isConfigurationRequest(message: string) {
   const source = message.replace(/K\s*线/gi, "K线");
   if (/(解释|为什么|是什么|怎么看|分析).*(风险|指标|亏损|暴露|估值|回撤|波动)/.test(source)) return false;
-  return /(工作台|界面|主题|浅色|深色|高对比|字体|大字|提醒|简洁|专业|白话|隐藏|显示|增加|添加|删除|移动|移到|顶部|放大|缩小|K线|财报|ETF.*配置|恢复默认|想挣钱|小白|新手|不知道.*看什么|不知道.*适合|帮我安排|没时间|只想学习|先模拟|已经有持仓|社交平台影响|先做风险检查|自动生成报告|重复暴露)/i.test(source);
+  return /(工作台|界面|主题|浅色|深色|高对比|字体|大字|提醒|简洁|专业|白话|隐藏|显示|增加|添加|删除|移动|移到|顶部|放大|缩小|K线|财报|ETF.*配置|恢复默认|想挣钱|小白|新手|不知道.*看什么|不知道.*适合|帮我安排|没时间|只想学习|学习模式|先模拟|已经有持仓|持仓复盘|社交平台影响|只.*ETF|忘记.*短线|先做风险检查|自动生成报告|重复暴露)/i.test(source);
 }
 
 export function safeContextPayload(context: AssistantPageContext, workspaceId: string, pendingCommandId: string | null) {

@@ -36,7 +36,7 @@ type AssistantSnapshot = UserSnapshot & {
   workspaceVersions?: Array<{ configId: string; workspace: Workspace; createdAt: string; action?:"update"|"create" }>;
   workspaceRedoVersions?: Array<{ configId: string; workspace: Workspace; createdAt: string; action?:"update"|"create" }>;
   workspaceAudit?: Array<{ commandId: string; intent: string; proposedChanges: string[]; status: "applied" | "cancelled"; createdAt: string; confirmedAt?: string }>;
-  exploratoryPreferences?: { userStage:UserStage; goal:ExploratoryGoal; holdingPeriod?:string; lossComfort?:string; weeklyTime?:string; confirmedAt:string };
+  exploratoryPreferences?: { userStage:UserStage; goal:ExploratoryGoal; holdingPeriod?:string; lossComfort?:string; weeklyTime?:string; viewFrequency?:string; focusSocialContent?:boolean; showTechnicalIndicators?:boolean; confirmedAt:string };
   assistantPendingCommands?: Record<string, StoredCommand>;
 };
 
@@ -209,7 +209,7 @@ export async function confirmAssistantCommand(commandId: string) {
   snapshot.workspaceAudit = [...(snapshot.workspaceAudit ?? []), { commandId, intent: "update_workspace", proposedChanges: command.changes, status: "applied" as const, createdAt: command.createdAt, confirmedAt: new Date().toISOString() }].slice(-200);
   snapshot.workspaces = command.createNew ? [...workspaces,command.proposedWorkspace] : workspaces.map((item) => item.id === command.workspaceId ? command.proposedWorkspace : item);
   snapshot.activeWorkspaceId = command.workspaceId;
-  if (command.parsed?.recommendation) snapshot.exploratoryPreferences = { userStage:command.parsed.recommendation.userStage, goal:command.parsed.recommendation.goal, confirmedAt:new Date().toISOString() };
+  if (command.parsed?.recommendation) snapshot.exploratoryPreferences = { userStage:command.parsed.recommendation.userStage, goal:command.parsed.recommendation.goal, ...command.parsed.recommendation.preferences, confirmedAt:new Date().toISOString() };
   delete snapshot.assistantPendingCommands?.[commandId];
   await writeUserSnapshot(snapshot);
   return { status: "applied", workspace: command.proposedWorkspace, applied_changes: command.changes, can_undo: true };
