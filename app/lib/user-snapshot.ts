@@ -17,6 +17,12 @@ export type UserSnapshot = {
   workspaceAudit?: unknown;
   exploratoryPreferences?: unknown;
   agentTasks?: unknown;
+  quantTasks?: unknown;
+  quantStrategies?: unknown;
+  quantSchedules?: unknown;
+  quantSignals?: unknown;
+  quantAudit?: unknown;
+  quantPaperPortfolios?: unknown;
   aiDefaultProviderId?: string;
   aiTaskRouting?: unknown;
   savedAt?: string;

@@ -1,0 +1,3 @@
+import {NextResponse} from "next/server";import {deleteStrategy,updateStrategy} from "@/app/lib/quant-research-server";
+export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}){try{return NextResponse.json({strategy:await updateStrategy((await params).id,await request.json())});}catch(error){return NextResponse.json({message:error instanceof Error?error.message:"无法修改策略"},{status:422});}}
+export async function DELETE(_:Request,{params}:{params:Promise<{id:string}>}){try{return NextResponse.json(await deleteStrategy((await params).id));}catch(error){return NextResponse.json({message:error instanceof Error?error.message:"无法删除策略"},{status:404});}}

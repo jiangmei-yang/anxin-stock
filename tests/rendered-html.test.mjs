@@ -282,15 +282,36 @@ test("server-renders the explainable personal quant workbench", async () => {
   const response = await render("/quant");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /量化规则/);
-  assert.match(html, /我的规则/);
-  assert.match(html, /条件筛选/);
-  assert.match(html, /策略验证/);
-  assert.match(html, /组合风险/);
-  assert.match(html, /规则提醒/);
-  assert.match(html, /固定演示股票池/);
-  assert.match(html, /确认前不会用于筛选/);
+  const source = await readFile(new URL("../app/components/quant-workspace.tsx", import.meta.url), "utf8");
+  assert.match(html, /量化研究/);
+  assert.match(html, /生成可检查的研究配置/);
+  assert.match(html, /Agent 执行计划/);
+  assert.match(source, /历史模拟/);
+  assert.match(source, /模拟组合/);
+  assert.match(source, /没有数据，就没有绩效数字/);
+  assert.match(html, /确认前不会运行或保存/);
+  assert.doesNotMatch(html, /固定演示股票池/);
   assert.doesNotMatch(html, /稳赚|必涨|强烈推荐|目标价/);
+});
+
+test("exposes a configurable, confirmable and auditable quant research API", async () => {
+  const [model, server, registry] = await Promise.all([
+    readFile(new URL("../app/lib/quant-research.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/quant-research-server.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/agent-registry.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(model, /STRATEGY_REGISTRY/);
+  assert.ok((model.match(/strategy\("/g) ?? []).length >= 14);
+  assert.match(model, /当前 A 股数据能力不支持可靠高频执行/);
+  assert.match(model, /至少需要 60 条/);
+  assert.match(server, /input\.confirmed!==true/);
+  assert.match(server, /connectedToBroker:false/);
+  assert.match(server, /runnerStatus:"unavailable"/);
+  assert.match(registry, /create_quant_task/);
+  assert.match(registry, /run_paper_simulation/);
+  for (const path of ["tasks/route.ts","backtest/route.ts","paper-run/route.ts","schedule/route.ts","signals/route.ts","audit/route.ts"]) {
+    assert.match(await readFile(new URL(`../app/quant/${path}`, import.meta.url), "utf8"), /export async function/);
+  }
 });
 
 test("server-renders native ETF and trade review workspaces", async () => {

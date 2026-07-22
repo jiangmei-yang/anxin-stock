@@ -21,6 +21,12 @@ export const TOOL_CATALOG:ToolDefinition[]=[
   tool("backtest","历史回测","对已确认的策略和数据区间进行历史模拟","quant","confirm",["public_market_data"],["回测","历史模拟","策略"]),
   tool("dca_simulation","定投模拟","模拟固定周期投入，不连接真实账户","quant","confirm",["public_market_data"],["定投","模拟"]),
   tool("parameter_sensitivity","参数敏感性","比较参数变化对历史模拟结果的影响","quant","confirm",["public_market_data"],["敏感性","参数","稳定性"]),
+  tool("create_quant_task","创建量化研究任务","把自然语言目标转换为可确认的策略、数据和工作台配置","quant","confirm",["user_input","strategy_registry"],["量化研究","日频","策略工作台","收盘后分析"]),
+  tool("list_quant_strategies","浏览策略注册表","读取可组合的策略定义与数据要求","quant","safe",["strategy_registry"],["策略库","有哪些策略","量化策略"]),
+  tool("run_quant_backtest","运行量化历史核验","只对已确认配置和真实输入数据运行历史模拟","quant","confirm",["public_market_data"],["量化回测","历史核验"]),
+  tool("run_paper_simulation","创建模拟组合","创建与真实持仓严格分离的纸上组合","quant","confirm",["public_market_data"],["模拟组合","纸上交易","虚拟持仓"]),
+  tool("schedule_quant_research","保存量化研究计划","保存频率和下次运行时间；运行器能力单独显示","automation","confirm",["user_preferences"],["每日收盘后","量化计划","定期研究"]),
+  tool("get_quant_signals","读取研究信号","读取观察、研究、持有或降低风险等中性研究状态","quant","safe",["tool_result"],["量化信号","研究信号"]),
   tool("create_reminder","创建提醒","创建用户确认的观察或复核提醒","automation","confirm",["user_preferences"],["提醒","每天","每周","定期"]),
   tool("save_user_rule","保存个人规则","保存用户明确确认的个人检查规则","automation","confirm",["user_input"],["规则","保存","以后"]),
   tool("create_watchlist","创建观察列表","保存观察标的，不产生交易指令","workspace","confirm",["user_input"],["观察列表","自选","关注"]),
@@ -37,6 +43,7 @@ export const MODULE_REGISTRY:ModuleDefinition[]=[
   ["social_topics","社交热点主题","analysis","half",["user_uploaded_social_content"]], ["social_heat","热度变化","analysis","half",["user_uploaded_social_content"]], ["social_sentiment","情绪分布","analysis","half",["user_uploaded_social_content"]],
   ["fundamental_verification","基本面核验","analysis","half",["public_financial_data"]], ["valuation_verification","估值核验","analysis","half",["public_market_data"]], ["volume_verification","资金与成交量核验","analysis","half",["public_market_data"]], ["portfolio_overlap","与持仓重合度","risk","half",["user_portfolio"]],
   ["weekly_digest","每周摘要","automation","full",["user_portfolio"]], ["pretrade_checklist","交易前检查","risk","full",["user_input"]], ["term_explainer","术语解释","education","half",["tool_result"]],
+  ["quant_strategy","量化策略","quant","full",["strategy_registry"]], ["quant_backtest","历史模拟","quant","full",["public_market_data"]], ["quant_paper","模拟组合","quant","full",["public_market_data"]], ["quant_risk","量化风险","risk","half",["public_market_data"]], ["quant_sensitivity","参数敏感性","quant","half",["public_market_data"]], ["quant_schedule","研究计划","automation","half",["user_preferences"]], ["quant_audit","量化审计","quant","full",["tool_result"]],
 ].map(([moduleId,name,category,defaultWidth,requiredSources])=>({moduleId,name,category,defaultWidth,requiredSources,version:"1.0"} as ModuleDefinition));
 
 export const DATA_SOURCE_REGISTRY=[
@@ -46,6 +53,7 @@ export const DATA_SOURCE_REGISTRY=[
   {sourceId:"user_input",name:"本次用户输入",available:true,scope:"单次任务"},
   {sourceId:"tool_result",name:"已验证工具结果",available:true,scope:"当前任务工具链"},
   {sourceId:"workspace_registry",name:"工作台配置注册中心",available:true,scope:"当前登录用户"},
+  {sourceId:"strategy_registry",name:"量化策略注册中心",available:true,scope:"研究规则定义"},
   {sourceId:"public_market_data",name:"公开行情数据",available:true,scope:"以工具返回状态为准"},
   {sourceId:"fund_disclosure",name:"基金公开披露",available:true,scope:"不保证实时"},
   {sourceId:"public_financial_data",name:"公开财务数据",available:true,scope:"以报告期为准"},
@@ -56,6 +64,7 @@ export const DATA_SOURCE_REGISTRY=[
 export const WORKFLOW_REGISTRY:Record<string,WorkspaceWorkflowStep[]>={
   beginner:["learn","simulate","review_risk","confirm_next_step"], etf:["research","check_etf_overlap","review_risk","confirm_next_step"],
   social:["check_social_claim","research","review_risk","confirm_next_step"], review:["review_trade","generate_report","weekly_review"], pretrade:["research","review_risk","pretrade_check","confirm_next_step"],
+  quant:["research","simulate","review_risk","confirm_next_step"],
 };
 
 export type GoalExtraction={goal:string;context:Record<string,unknown>;user_stage:"beginner"|"learner"|"experienced"|"professional"|"unknown";data_requirements:string[];analysis_requirements:string[];tool_requirements:string[];ui_requirements:string[];workflow_requirements:string[];automation_requirements:string[];style_requirements:string[];risk_constraints:string[];missing_information:string[];risk_level:"low"|"medium"|"high"|"restricted"};
