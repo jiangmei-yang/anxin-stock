@@ -28,8 +28,8 @@ test("keeps behavior evidence in evaluation surfaces instead of the product home
 test("opens stock research on the evidence summary instead of an empty chart", () => {
   const research = read("app/client-page.tsx");
   const navigation = read("app/components/app-navigation.tsx");
-  assert.match(research, /useState<"概览" \| "财报体检"[\s\S]*?>\("概览"\)/);
-  assert.match(research, /setPanel\("概览"\)/);
+  assert.match(research, /useState<"概览" \| "财报体检"[\s\S]*?>\("价格与事件"\)/);
+  assert.match(research, /setPanel\("价格与事件"\)/);
   assert.match(research, /submittedQuery\.trim\(\) \|\| "检查近期正式披露"/);
   assert.match(research, /<AppNavigation/);
   assert.match(navigation, /Market Clarity 安心看股工作台/);

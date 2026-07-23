@@ -513,6 +513,11 @@ test("keeps the daily workflow and decision loop in the product source", async (
   assert.doesNotMatch(page, /系统从 27 条行情/);
   assert.match(page, /当前资料状态/);
   assert.match(page, /价格与事件/);
+  assert.match(page, /setPanel\("价格与事件"\)/);
+  assert.match(page, /research-chart-tooltip/);
+  assert.match(page, /moveHoverByKey/);
+  assert.match(page, /同期沪深300/);
+  assert.match(page, /放大走势图/);
   assert.match(page, /财报体检/);
   assert.match(page, /研究一个具体问题/);
   assert.match(page, /定量核实/);
