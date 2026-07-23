@@ -80,6 +80,11 @@ test("keeps onboarding contextual and navigation grouped by user goal", async ()
   assert.match(workbench, /点击固定读数/);
   assert.match(workbench, /全屏查看图表/);
   assert.match(workbench, /showMa5/);
+  assert.match(workbench, /showBenchmark/);
+  assert.match(workbench, /api\/market\/benchmark/);
+  assert.match(workbench, /chart-benchmark/);
+  assert.match(workbench, /相对沪深 300/);
+  assert.match(workbench, /沪深300 当日/);
   assert.match(workbench, /hoveredAmplitude/);
   assert.match(workbench, /开盘/);
   assert.match(workbench, /published_at/);
