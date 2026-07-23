@@ -15,7 +15,9 @@ export type AgentToolCall={tool_id:string;status:"pending"|"running"|"completed"
 export type AgentTask={type:"agent_task";task_id:string;goal:string;status:"planning"|"awaiting_confirmation"|"completed"|"failed"|"cancelled";created_at:string;updated_at:string;provider:string;model:string;planner_mode:"provider"|"local_fallback";extraction:GoalExtraction;plan:{task_id:string;goal:string;steps:AgentPlanStep[];requires_confirmation:boolean};steps:AgentPlanStep[];tool_calls:AgentToolCall[];workspace_patch:ReturnType<typeof previewWorkspaceChange>|null;workspace_command_id?:string;theme_schema?:ThemeSchema;result:unknown;warnings:string[];sources:AgentSource[];tool_proposal?:ToolProposal;requires_confirmation:boolean;original_input:string;reliability:ReliabilityState};
 type AgentSnapshot=UserSnapshot&{workspaces?:Workspace[];activeWorkspaceId?:string;holdings?:Record<string,{name?:string;value?:number;industry?:string}>;investorProfile?:InvestorProfile;agentTasks?:AgentTask[]};
 
-const AGENT_PLANNER_PROMPT=`你是安心看股 Goal-to-Workspace 规划器。只返回 JSON，不写额外文字。你必须理解目标而不是输出投资建议。不得编造数据、工具或执行状态。输出字段：goal,context,user_stage,data_requirements,analysis_requirements,tool_requirements,ui_requirements,workflow_requirements,automation_requirements,style_requirements,risk_constraints,missing_information,risk_level。risk_level 只能是 low/medium/high/restricted。只有用户要求系统代为买卖、自动下单，或要求平台保证收益时才是 restricted。用户表达“想赚钱”“希望短期翻倍”等目标不等于要求平台承诺收益，应标为 high，指出预期不现实，并继续提供学习、风险澄清或纸面模拟路径。`;
+const AGENT_PLANNER_PROMPT=`你是安心看股 Goal-to-Workspace 规划器。只返回 JSON，不写额外文字。你必须理解目标而不是输出投资建议。不得编造数据、工具或执行状态。输出字段：goal,context,user_stage,data_requirements,analysis_requirements,tool_requirements,ui_requirements,workflow_requirements,automation_requirements,style_requirements,risk_constraints,missing_information,risk_level。risk_level 只能是 low/medium/high/restricted。
+规划原则：只选择完成目标所需的最少工具；用户未明确要求读取“我的持仓/我的组合”时，不得选择 get_portfolio 或 calculate_portfolio_risk；用户说“不要读取/不要使用”时必须遵守。分析问题不得自行添加 ui_requirements，只有用户明确要求修改页面、工作台、模块、布局、主题或流程时才能生成界面修改。缺少信息时最多列出 3 项，并按重要性排序。
+只有用户要求系统代为买卖、自动下单，或要求平台保证收益时才是 restricted。用户表达“想赚钱”“希望短期翻倍”等目标不等于要求平台承诺收益，应标为 high，指出预期不现实，并继续提供学习、风险澄清或纸面模拟路径。`;
 const now=()=>new Date().toISOString();
 const cleanList=(value:unknown)=>Array.isArray(value)?value.filter((item):item is string=>typeof item==="string").slice(0,20):[];
 const extractJson=(text:string)=>{const match=text.match(/\{[\s\S]*\}/);if(!match)throw new Error("规划模型没有返回 JSON");return JSON.parse(match[0]) as Record<string,unknown>;};
@@ -44,6 +46,23 @@ export function classifyGoalRisk(goal:string){
 function validateExtraction(raw:Record<string,unknown>,goal:string,context:Record<string,unknown>):GoalExtraction{
   const risk=["low","medium","high","restricted"].includes(String(raw.risk_level))?raw.risk_level as GoalExtraction["risk_level"]:"low";
   return {goal:typeof raw.goal==="string"?raw.goal:goal,context,user_stage:["beginner","learner","experienced","professional","unknown"].includes(String(raw.user_stage))?raw.user_stage as GoalExtraction["user_stage"]:"unknown",data_requirements:cleanList(raw.data_requirements),analysis_requirements:cleanList(raw.analysis_requirements),tool_requirements:cleanList(raw.tool_requirements),ui_requirements:cleanList(raw.ui_requirements),workflow_requirements:cleanList(raw.workflow_requirements),automation_requirements:cleanList(raw.automation_requirements),style_requirements:cleanList(raw.style_requirements),risk_constraints:cleanList(raw.risk_constraints),missing_information:cleanList(raw.missing_information),risk_level:risk};
+}
+
+function toolAllowedForGoal(tool:ToolDefinition,goal:string){
+  const normalized=goal.replaceAll(/\s+/g,"");
+  const deniesPortfolio=/(不要|无需|不必|禁止)(读取|使用|调用)?(我的)?(真实)?(持仓|组合|账户)/.test(normalized);
+  const explicitlyUsesPortfolio=/(读取|分析|检查|诊断|看看|查看|结合)(我的|当前|已保存)?(持仓|组合|仓位)|我的(持仓|组合)/.test(normalized);
+  if(["get_portfolio","calculate_portfolio_risk"].includes(tool.toolId))return !deniesPortfolio&&explicitlyUsesPortfolio;
+  if(tool.toolId==="search_capabilities")return /(平台|系统|安心看股).*(能做什么|支持什么|功能|能力|怎么用|如何使用)|(有哪些|支持哪些).*(页面|工具|功能|能力)/.test(goal);
+  if(tool.toolId==="search_etf")return /(搜索|查找|找出|有哪些|代码).*(ETF|指数基金)|(ETF|指数基金).*(搜索|查找|代码)/i.test(goal);
+  if(tool.toolId==="get_etf_holdings")return /(?<!\d)\d{6}(?!\d)/.test(goal)&&/(持仓|重仓|成分)/.test(goal);
+  if(tool.toolId==="diagnose_etf_overlap")return /(?<!\d)\d{6}(?!\d)/.test(goal)&&/(重合|重复暴露|底层重复)/.test(goal);
+  if(["search_stock","get_market_data","get_financial_report","get_announcement"].includes(tool.toolId))return /(股票|个股|公司|行情|价格|走势|成交量|财报|现金流|利润|营收|公告|(?<!\d)[036]\d{5}(?!\d))/i.test(goal);
+  if(tool.toolId==="compare_etf")return /(比较|对比).*(ETF|基金)|(ETF|基金).*(比较|对比)/i.test(goal);
+  if(tool.toolId==="explain_metric")return /(解释|看懂|是什么|什么意思).*(指标|估值|波动|回撤|集中度|现金流|市盈率|PE|PB|ROE)/i.test(goal);
+  if(tool.toolId==="dca_simulation")return /(定投).*(模拟)|(模拟).*(定投)/.test(goal);
+  if(tool.toolId==="run_paper_simulation")return /(纸面|模拟|虚拟).*(组合|交易|投资)/.test(goal);
+  return true;
 }
 
 function source(sourceId:string,status:AgentSource["status"]="available"):AgentSource{const item=DATA_SOURCE_REGISTRY.find((row)=>row.sourceId===sourceId);return {source_id:sourceId,name:item?.name??sourceId,collected_at:now(),sample_scope:item?.scope??"工具返回范围",status};}
@@ -111,10 +130,12 @@ export async function createAgentTask(input:{goal:string;route?:string;selected_
   }
   const requestsNewTool=/(增加|创建|做一个|开发).*(工具|分析器|检测器|模拟器)/.test(goal);
   const capabilityGap=extraction.tool_requirements.some((toolId)=>!TOOL_CATALOG.some((item)=>item.toolId===toolId))||(requestsNewTool&&!/(ETF|回测|定投|交易前|交易复盘|社交内容|社交热点|指标解释|提醒|观察列表|工作台)/i.test(goal));
-  let matched=[...new Map([...searchTools(extraction),...TOOL_CATALOG.filter((item)=>extraction.tool_requirements.includes(item.toolId))].map((item)=>[item.toolId,item])).values()].filter((item)=>item.permissionLevel!=="restricted");
+  let matched=[...new Map([...searchTools(extraction),...TOOL_CATALOG.filter((item)=>extraction.tool_requirements.includes(item.toolId))].map((item)=>[item.toolId,item])).values()].filter((item)=>item.permissionLevel!=="restricted"&&toolAllowedForGoal(item,goal));
   if(capabilityGap)matched=[];
   const toolCalls:AgentToolCall[]=[];for(const item of matched.filter((tool)=>tool.permissionLevel==="safe").slice(0,5))toolCalls.push(await executeSafeTool(item,goal,snapshot));
-  const needsWorkspace=extraction.ui_requirements.length>0||extraction.style_requirements.length>0||/(工作台|模块|布局|主题|界面|放到首页)/.test(goal);
+  const deniesWorkspace=/(不要|无需|不必|禁止)(调整|修改|创建|改变|使用)?(我的|当前)?(工作台|页面|界面|模块|布局|主题|流程)/.test(goal.replaceAll(/\s+/g,""));
+  const explicitWorkspaceRequest=!deniesWorkspace&&/(工作台|页面|界面|模块|布局|主题|颜色|字体|图表|动效|放到首页|创建.{0,8}流程|建立.{0,8}流程|调整.{0,8}流程|隐藏|显示|移动)/.test(goal);
+  const needsWorkspace=explicitWorkspaceRequest&&(extraction.ui_requirements.length>0||extraction.style_requirements.length>0||explicitWorkspaceRequest);
   let workspacePatch:AgentTask["workspace_patch"]=null;let workspaceCommandId:string|undefined;let themeSchema:ThemeSchema|undefined;
   if(needsWorkspace){const previewResult=await createAssistantPreview(goal,current.id);workspacePatch=previewResult.parsed;if(workspacePatch.canApply)workspaceCommandId=previewResult.commandId;themeSchema=themePatchFromRequirements(extraction.style_requirements.length?extraction.style_requirements:[goal],workspacePatch.preview.theme)?.themeSchema;}
   const steps:AgentPlanStep[]=[{id:"step_1",title:"理解目标与当前上下文",tool:null,status:"completed",requires_confirmation:false},...matched.slice(0,6).map((item,index)=>({id:`step_${index+2}`,title:item.name,tool:item.toolId,status:(item.permissionLevel==="safe"?(toolCalls.find((call)=>call.tool_id===item.toolId)?.status??"pending"):"pending") as AgentPlanStep["status"],requires_confirmation:item.permissionLevel!=="safe"})),...(needsWorkspace?[{id:`step_${matched.length+2}`,title:"预览工作台修改",tool:"workspace_orchestrator",status:workspacePatch?.canApply?"completed" as const:"failed" as const,requires_confirmation:true}]:[])];

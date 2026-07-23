@@ -110,7 +110,7 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
         currentWorkspaceId: payload.workspace_id || current.currentWorkspaceId,
         canUndo:payload.can_undo??current.canUndo,
         canRedo:payload.can_redo??current.canRedo,
-        selectedProvider: payload.providers?.some((item) => item.providerId === current.selectedProvider && item.enabled && item.secretStatus !== "missing")
+        selectedProvider: current.selectedProvider !== "mock" && payload.providers?.some((item) => item.providerId === current.selectedProvider && item.enabled && item.secretStatus !== "missing")
           ? current.selectedProvider
           : payload.default_provider_id || "mock",
       }));
@@ -155,7 +155,7 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
         }),
         signal:controller.signal,
       });
-      const payload = await response.json() as { type?:AssistantMessage["type"];content?:string;message?: { type?: AssistantMessage["type"]; content?: string; preview?: AssistantCommandPreview }; preview?:AssistantCommandPreview;model_used?: string; provider_id?:string;session_id?: string;tool_used?:string|null };
+      const payload = await response.json() as { type?:AssistantMessage["type"];content?:string;message?: { type?: AssistantMessage["type"]; content?: string; preview?: AssistantCommandPreview }; preview?:AssistantCommandPreview;model_used?: string; provider_id?:string;session_id?: string;tool_used?:string|null;suggested_actions?:string[] };
       if (!response.ok) throw new Error(payload.content || payload.message?.content || "助手暂时没有响应");
       appendMessage({
         id: nowId("assistant"),
@@ -164,6 +164,7 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
         preview: payload.preview ?? payload.message?.preview,
         toolUsed:payload.tool_used,
         modelUsed:payload.model_used,
+        suggestedActions:payload.suggested_actions,
         createdAt: new Date().toISOString(),
       });
       if (payload.provider_id) setState((current) => ({ ...current, selectedProvider:payload.provider_id! }));
@@ -278,6 +279,10 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
                 <div>
                   <p>{message.content}</p>
                   {index === 0 && <div className="assistant-quick-actions">{quickActions.map((action) => <Button key={action.label} variant="outline" size="sm" onClick={() => void send(action.prompt)}>{action.label}</Button>)}</div>}
+                  {message.type === "clarification" && message.suggestedActions?.length ? <div className="assistant-answer-options" aria-label="可直接选择的回答">
+                    <small>选一个即可，也可以在下方自行填写</small>
+                    <div>{message.suggestedActions.slice(0,4).map((action)=><Button key={action} variant="outline" size="sm" disabled={sending} onClick={()=>void send(action)}>{action}</Button>)}</div>
+                  </div> : null}
                   {(message.modelUsed||message.toolUsed) && <small className="assistant-call-status"><Cpu />{message.modelUsed||"规则模式"}{message.toolUsed?` · 已调用 ${message.toolUsed}`:" · 未调用数据工具"}</small>}
                   {message.preview && <ConfigPreviewCard preview={message.preview} pending={state.pendingPreview?.commandId === message.preview.commandId} disabled={sending} onConfirm={confirmPreview} onCancel={cancelPreview} onContinue={(preview) => setState((current) => ({ ...current, draft: `${preview.changes.join("，")}，另外` }))} />}
                   {message.action === "undo" && <Button variant="outline" size="sm" disabled={sending} onClick={() => void undo()}><RotateCcw data-icon="inline-start" />撤销这次修改</Button>}
@@ -293,6 +298,7 @@ export function GlobalAIAssistantProvider({ children }: { children: React.ReactN
           <div className="assistant-suggestion-row" aria-label="当前页面建议">{context.suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => setState((current) => ({ ...current, draft: suggestion }))}>{suggestion}</button>)}</div>
 
           <form className="assistant-composer" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+            <label>{state.messages.at(-1)?.type === "clarification" ? "自定义回答（可选）" : "描述你的目标"}</label>
             <Textarea value={state.draft} onChange={(event) => setState((current) => ({ ...current, draft: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); } }} placeholder="例如：检查 600519 最近有哪些可核实变化" aria-label="向 AI 助手输入" rows={2} />
             <div><button type="button" onClick={() => void resetConversation()}><History />重置会话</button><span>Enter 发送 · Shift+Enter 换行</span><Button type="submit" size="icon" disabled={!state.draft.trim() || sending} aria-label="发送"><Send /></Button></div>
           </form>

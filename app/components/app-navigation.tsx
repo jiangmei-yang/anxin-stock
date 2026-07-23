@@ -2,37 +2,48 @@
 
 import Link from "next/link";
 import {
-  Bot,
-  BriefcaseBusiness,
-  FileSearch,
-  Gauge,
-  Home,
-  Layers3,
-  MessageSquareWarning,
-  ReceiptText,
-  SlidersHorizontal,
-  Sparkles,
+  Bot, BookOpen, BriefcaseBusiness, FileSearch, Gauge, History, Home, Layers3,
+  MessageSquareWarning, ReceiptText, Settings2, ShieldCheck, SlidersHorizontal, Sparkles,
 } from "lucide-react";
+import { BrandMark } from "./brand-mark";
 
-export const APP_NAVIGATION = [
-  { href: "/", label: "工作台", icon: Home },
-  { href: "/opportunity", label: "机会检查", icon: MessageSquareWarning },
-  { href: "/agent", label: "任务助手", icon: Bot },
-  { href: "/profile", label: "我的规则", icon: SlidersHorizontal },
-  { href: "/portfolio", label: "我的组合", icon: BriefcaseBusiness },
-  { href: "/analysis?view=research", activePath: "/analysis", label: "股票研究", icon: FileSearch },
-  { href: "/etf-tool", label: "ETF 诊断", icon: Layers3 },
-  { href: "/quant", label: "量化研究", icon: Gauge },
-  { href: "/trade-tool", label: "交易复盘", icon: ReceiptText },
-  { href: "/ai-settings", label: "AI 模型", icon: Sparkles },
+const NAV_GROUPS = [
+  { id: "home", href: "/", label: "工作台", icon: Home, paths: ["/"] },
+  { id: "research", href: "/analysis?view=research", label: "研究", icon: FileSearch, paths: ["/analysis", "/etf-tool", "/quant"], children: [
+    { href: "/analysis?view=research", label: "股票研究", detail: "行情、事件与财务", icon: FileSearch },
+    { href: "/etf-tool", label: "ETF 诊断", detail: "持仓穿透与重复暴露", icon: Layers3 },
+    { href: "/quant", label: "量化研究", detail: "规则、回测与模拟", icon: Gauge },
+  ] },
+  { id: "decision", href: "/opportunity", label: "决策", icon: ShieldCheck, paths: ["/opportunity", "/trade-tool"], children: [
+    { href: "/opportunity", label: "机会检查", detail: "核实消息与跟风风险", icon: MessageSquareWarning },
+    { href: "/analysis?view=decision", label: "交易前验证", detail: "金额、理由与退出条件", icon: ShieldCheck },
+    { href: "/trade-tool", label: "交易复盘", detail: "归因、费用与行为模式", icon: ReceiptText },
+  ] },
+  { id: "portfolio", href: "/portfolio", label: "组合", icon: BriefcaseBusiness, paths: ["/portfolio", "/profile"], children: [
+    { href: "/portfolio", label: "我的组合", detail: "集中度与行业暴露", icon: BriefcaseBusiness },
+    { href: "/profile", label: "我的规则", detail: "个人提醒边界", icon: SlidersHorizontal },
+    { href: "/analysis?view=history", label: "历史记录", detail: "复核过去的决定", icon: History },
+  ] },
+  { id: "assistant", href: "/agent", label: "助手", icon: Bot, paths: ["/agent", "/workspace", "/ai-settings", "/features"], children: [
+    { href: "/agent", label: "任务助手", detail: "用目标组织工具和流程", icon: Bot },
+    { href: "/workspace", label: "编辑工作台", detail: "调整模块与布局", icon: Settings2 },
+    { href: "/ai-settings", label: "AI 模型", detail: "模型连接与隐私", icon: Sparkles },
+    { href: "/features", label: "产品说明", detail: "功能、状态与 Pitch 证据", icon: BookOpen },
+  ] },
 ] as const;
+
+export const APP_NAVIGATION = NAV_GROUPS.flatMap((group) => group.children ?? [{ href: group.href, label: group.label, icon: group.icon }]);
 
 export function AppNavigation({ activePath, userName, syncLabel }: { activePath: string; userName?: string; syncLabel?: string }) {
   return <aside className="unified-sidebar">
-    <Link href="/" className="unified-brand" aria-label="安心看股工作台"><span>安</span><div><strong>安心看股</strong><small>个人投资工作台</small></div></Link>
-    <nav aria-label="工作台导航">{APP_NAVIGATION.map(({ href, activePath: itemActivePath, label, icon: Icon }) => {
-      const selected = activePath === (itemActivePath ?? href.split("?")[0]);
-      return <Link key={href} href={href} className={selected ? "active" : undefined} aria-current={selected ? "page" : undefined}><Icon /><span>{label}</span></Link>;
+    <Link href="/" className="unified-brand" aria-label="安心看股 Market Clarity 工作台"><BrandMark /><div><strong>安心看股</strong><small>Market Clarity</small></div></Link>
+    <nav aria-label="工作台导航" data-guide="primary-nav">{NAV_GROUPS.map((group) => {
+      const selected = group.paths.includes(activePath as never);
+      const Icon = group.icon;
+      return <div className={`nav-group ${selected ? "active" : ""}`} key={group.id}>
+        <Link href={group.href} className="nav-primary" aria-current={selected ? "page" : undefined}><Icon /><span>{group.label}</span></Link>
+        {group.children && <div className="nav-submenu" role="menu" aria-label={`${group.label}子菜单`}><header><Icon /><span><strong>{group.label}</strong><small>{group.id === "research" ? "理解市场和标的" : group.id === "decision" ? "核实依据再行动" : group.id === "portfolio" ? "管理持仓与规则" : "让系统替你组织任务"}</small></span></header>{group.children.map((item) => { const ChildIcon = item.icon; return <Link href={item.href} key={item.href} role="menuitem"><ChildIcon /><span><strong>{item.label}</strong><small>{item.detail}</small></span></Link>; })}</div>}
+      </div>;
     })}</nav>
     {userName && <div className="unified-account"><span>{userName.slice(0, 1)}</span><div><strong>{userName}</strong><small>{syncLabel ?? "已登录"}</small></div><Link href="/signout-with-chatgpt" aria-label="退出">退出</Link></div>}
   </aside>;

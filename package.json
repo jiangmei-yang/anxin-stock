@@ -8,7 +8,7 @@
   "scripts": {
     "capabilities:sync": "node scripts/generate-capability-manifest.mjs",
     "predev": "npm run capabilities:sync",
-    "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
+    "dev": "node scripts/ensure-local-ai-secret.mjs && WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "prebuild": "npm run capabilities:sync",
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",

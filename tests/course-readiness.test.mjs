@@ -10,17 +10,19 @@ test("keeps one primary entry on the quant research page", () => {
   assert.doesNotMatch(page, /QuantGoalRouter|NaturalStrategyAssistant/);
 });
 
-test("shows the real AI state even when only rule mode is available", () => {
+test("shows the real AI state in the product shell without making it home content", () => {
   const workbench = read("app/components/personal-workbench.tsx");
-  assert.match(workbench, /<AIModelHomeCard providers=\{aiProviders\}\/>/);
-  assert.match(workbench, /AI 自由对话未启用；确定性检查仍可使用/);
+  assert.match(workbench, /模型设置<Badge variant="outline">/);
+  assert.match(workbench, /providerId === "mock" \? "规则可用"/);
+  assert.doesNotMatch(workbench, /function AIModelHomeCard/);
 });
 
-test("exposes behavior evidence without presenting it as population proof", () => {
+test("keeps behavior evidence in evaluation surfaces instead of the product home", () => {
   const workbench = read("app/components/personal-workbench.tsx");
-  assert.match(workbench, /审查是否真的改变了决定/);
-  assert.match(workbench, /当前账户的真实记录，不代表所有用户/);
-  assert.match(workbench, /修改或延迟/);
+  const evaluation = read("app/evaluation/page.tsx");
+  assert.doesNotMatch(workbench, /课程验证仍需汇总/);
+  assert.match(evaluation, /跨用户证据/);
+  assert.match(evaluation, /核心任务漏斗/);
 });
 
 test("opens stock research on the evidence summary instead of an empty chart", () => {
@@ -28,7 +30,7 @@ test("opens stock research on the evidence summary instead of an empty chart", (
   assert.match(research, /useState<"概览" \| "财报体检"[\s\S]*?>\("概览"\)/);
   assert.match(research, /setPanel\("概览"\)/);
   assert.match(research, /submittedQuery\.trim\(\) \|\| "检查近期正式披露"/);
-  assert.match(research, /aria-label="返回安心看股工作台"/);
+  assert.match(research, /aria-label="返回安心看股 Market Clarity 工作台"/);
   assert.match(research, /label: "研究概览"/);
   assert.match(research, /href: "\/quant", label: "量化研究"/);
 });
@@ -181,4 +183,12 @@ test("does not label the initial health check as a retrying failure",()=>{
   assert.match(status,/status\?label\[status\]:"检查中"/);
   assert.match(status,/正在读取，不代表故障/);
   assert.doesNotMatch(status,/status=data\?\.status\.status\?\?"retrying"/);
+});
+
+test("keeps every model turn compact and option-led",()=>{
+  const assistant=read("app/lib/assistant-server.ts");
+  assert.match(assistant,/normalizeAssistantEnvelope/);
+  assert.match(assistant,/不超过 180 个汉字的直接回答/);
+  assert.match(assistant,/最多一个必要问题/);
+  assert.match(assistant,/modelOptions\.length\?"clarification"/);
 });

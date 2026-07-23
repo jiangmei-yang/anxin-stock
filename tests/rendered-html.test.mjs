@@ -20,27 +20,60 @@ test("server-renders the personal investment workbench", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>安心看股 · 个人投资工作台<\/title>/i);
-  assert.match(html, /今天先做什么/);
-  assert.match(html, /我看到一个机会/);
-  assert.match(html, /研究一只股票/);
+  assert.match(html, /<title>安心看股 · Market Clarity<\/title>/i);
+  assert.match(html, /市场概览/);
+  assert.match(html, /默认研究：贵州茅台/);
+  assert.match(html, /从你现在关心的事情开始/);
+  assert.match(html, /研究股票/);
+  assert.match(html, /核实一条消息/);
   assert.match(html, /我的规则/);
-  assert.match(html, /看看我的组合/);
-  assert.match(html, /个人投资工作台/);
+  assert.match(html, /检查我的组合/);
+  assert.doesNotMatch(html, /我的使用记录/);
+  assert.match(html, /Market Clarity/);
   assert.match(html, /aria-label="工作台导航"/);
+  assert.match(html, /本页怎么用/);
   assert.match(html, /id="main-content"/);
   assert.match(html, /data-theme="light_quiet"/);
   assert.match(html, /安静浅色/);
 });
 
-test("keeps theme, local signal evidence, and four-step precheck in the workbench source", async () => {
+test("keeps onboarding contextual and navigation grouped by user goal", async () => {
+  const [navigation, guide, workbench, css] = await Promise.all([
+    readFile(new URL("../app/components/app-navigation.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/contextual-guide.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/personal-workbench.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(navigation, /label: "研究"/);
+  assert.match(navigation, /label: "决策"/);
+  assert.match(navigation, /label: "组合"/);
+  assert.match(navigation, /label: "助手"/);
+  assert.doesNotMatch(navigation, /href: "\/demo", label: "快速体验"/);
+  assert.match(guide, /本页怎么用/);
+  assert.match(guide, /path === "\/analysis"/);
+  assert.match(guide, /path === "\/etf-tool"/);
+  assert.match(guide, /第 \{step \+ 1\} 步/);
+  assert.match(workbench, /近 60 个交易日价格与成交量走势图/);
+  assert.match(workbench, /60日高点/);
+  assert.match(workbench, /最新可核实事件/);
+  assert.match(css, /\.nav-submenu/);
+  assert.match(css, /\.context-guide-panel/);
+  assert.match(css, /\.chart-axis-label/);
+});
+
+test("keeps theme, local signal evidence, and progressive precheck in the workbench source", async () => {
   const [component, logic, css] = await Promise.all([
     readFile(new URL("../app/components/personal-workbench.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/lib/personal-workbench.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
-  assert.match(component, /原文中的具体信号/);
-  assert.match(component, /交易前四步核对/);
+  assert.match(component, /为什么需要核对/);
+  assert.match(component, /与你的决定有什么关系/);
+  assert.match(component, /HomeStockFocus/);
+  assert.doesNotMatch(component, /我的使用记录/);
+  assert.match(component, /继续检查交易计划/);
+  assert.match(component, /reviewStep===1/);
+  assert.match(component, /此时不需要股票代码或计划金额/);
   assert.match(component, /行业暴露可展开核对/);
   assert.match(component, /不代表必须卖出/);
   assert.match(logic, /themeId: "light_quiet"/);

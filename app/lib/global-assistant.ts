@@ -20,6 +20,7 @@ export type AssistantMessage = {
   action?: "undo" | "redo";
   toolUsed?: string | null;
   modelUsed?: string;
+  suggestedActions?: string[];
 };
 
 export type AssistantCommandPreview = {
@@ -76,12 +77,14 @@ export type AssistantSessionState = {
   canRedo: boolean;
 };
 
-export const ASSISTANT_SESSION_KEY = "anxin.globalAssistant.v1";
+// Bump the key when the assistant interaction contract changes. This also keeps
+// old, potentially stale model answers from silently shaping a new session.
+export const ASSISTANT_SESSION_KEY = "marketClarity.globalAssistant.v2";
 
 export const WELCOME_MESSAGE: AssistantMessage = {
   id: "welcome",
   type: "assistant_message",
-  content: "说出你现在要完成的事：核实一条消息、看懂持仓风险，或调整工作台。我会先列出步骤；涉及保存和界面修改时，再请你确认。",
+  content: "你现在想先做哪件事？可以直接选一个，也可以用自己的话描述。我不会自动读取持仓；需要个人数据时会先说明。",
   createdAt: new Date(0).toISOString(),
 };
 
