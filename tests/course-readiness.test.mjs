@@ -131,9 +131,12 @@ test("gives external participants one neutral task-to-feedback-to-offer journey"
   assert.match(page,/PilotJourney/);
   assert.match(page,/早期用户体验研究/);
   assert.match(journey,/PARTICIPANT_SEGMENTS/);
+  assert.match(journey,/ParticipantRelation/);
+  assert.match(journey,/我是外部体验者/);
   assert.match(journey,/DemoWalkthrough onComplete/);
   assert.match(journey,/status: "started"/);
-  assert.match(journey,/status: "completed"/);
+  assert.match(journey,/status: "task_completed"/);
+  assert.match(journey,/status: "feedback_submitted"/);
   assert.match(journey,/status: "abandoned"/);
   assert.match(journey,/没有标准答案/);
   assert.match(journey,/没有预选答案/);
@@ -149,9 +152,14 @@ test("uses an action-based pricing experiment instead of counting an attitude qu
   assert.match(pilot,/status='joined'/);
   assert.match(pilot,/pilot_exposures/);
   assert.match(pilot,/view_count/);
+  assert.match(pilot,/participant_relation='external'/);
+  assert.match(pilot,/internal_exposed/);
   assert.match(page,/14 天付费测试/);
   assert.match(page,/event:"view"/);
+  assert.match(page,/participantRelation/);
   assert.match(page,/不会自动扣费/);
+  assert.match(evaluation,/外部用户行为型价格测试/);
+  assert.match(evaluation,/均未计入/);
   assert.match(evaluation,/不把态度题算作收入/);
 });
 
@@ -160,20 +168,24 @@ test("measures the real task funnel instead of only completed feedback",()=>{
   const decision=read("app/client-page.tsx");
   const evaluation=read("app/evaluation/page.tsx");
   assert.match(study,/user_study_sessions/);
-  assert.match(study,/"started"\|"completed"\|"abandoned"/);
+  assert.match(study,/"started"\|"task_completed"\|"feedback_submitted"\|"abandoned"/);
   assert.match(study,/30 minutes/);
-  assert.match(study,/WHEN user_study_sessions\.status='completed' THEN 'completed'/);
+  assert.match(study,/participant_relation='external'/);
+  assert.match(study,/participantKey=await digest\(`participant:\$\{owner\}`\)/);
+  assert.match(study,/feedback_submitted/);
   assert.match(study,/ON CONFLICT\(owner_key,session_key\) DO UPDATE/);
   assert.match(study,/quick_completed/);
   assert.match(study,/engaged_completed/);
   assert.match(decision,/status:"started"/);
-  assert.match(decision,/status:"completed"/);
+  assert.match(decision,/status:"task_completed"/);
   assert.match(decision,/status:"abandoned"/);
   assert.match(decision,/navigator\.sendBeacon/);
-  assert.match(evaluation,/核心任务漏斗/);
+  assert.match(evaluation,/外部用户核心任务漏斗/);
   assert.match(evaluation,/完成率/);
   assert.match(evaluation,/转化率/);
   assert.match(evaluation,/15 秒内快速结束/);
+  assert.match(evaluation,/愿意查看价格方案/);
+  assert.match(evaluation,/态度题，不计作候补或收入/);
 });
 
 test("documents a reproducible external validation protocol",()=>{

@@ -54,7 +54,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FinancialHealthPanel } from "./components/financial-health-panel";
 import { AppNavigation } from "./components/app-navigation";
 import type { QuantHypothesis, QuantTestResult, SavedQuantVerification } from "./lib/quant-verification";
-import {PARTICIPANT_SEGMENTS,type ParticipantSegment} from "./lib/user-study-validation";
+import {PARTICIPANT_SEGMENTS,type ParticipantRelation,type ParticipantSegment} from "./lib/user-study-validation";
 
 type View = "desk" | "research" | "newDecision" | "decision" | "decisionResult" | "history" | "portfolio" | "rules" | "privacy";
 type TradeAction = "买入" | "补仓" | "卖出" | "继续观察";
@@ -62,10 +62,10 @@ type UserRules = { investableCapital: number; maxSingleStockValue: number; maxSi
 type HoldingBook = Record<string, { name: string; value: number }>;
 type WatchBook = Record<string, { name: string }>;
 type ReasonStructure = { fact: string; external: string; inference: string; urgency: string; source: string };
-type TestFeedback = { testerCode: string; participantSegment?: ParticipantSegment; satisfaction: number; riskUnderstood: boolean; riskExplanation?: string; repeatIntent: boolean; paidIntent: boolean; confusingStep: string; consentedAtIso?: string; submittedAtIso: string };
+type TestFeedback = { testerCode: string; participantSegment?: ParticipantSegment; participantRelation?:ParticipantRelation; satisfaction: number; riskUnderstood: boolean; riskExplanation?: string; repeatIntent: boolean; paidIntent: boolean; confusingStep: string; consentedAtIso?: string; submittedAtIso: string };
 type CloudSyncStatus = "loading" | "saving" | "synced" | "local";
 type CloudSnapshot = { rules?: Partial<UserRules>; holdings?: HoldingBook; watched?: WatchBook; decisionRecords?: DecisionResult[]; latestDecision?: DecisionResult; quantVerifications?: SavedQuantVerification[] };
-type DecisionResult = { stock: Stock; action: TradeAction; originalAmount: number; finalAmount: number; result: "已修改" | "维持计划" | "已延迟"; message: string; reason?: string; reasonStructure?: ReasonStructure; invalidation?: string; horizon?: string; reviewedAt?: string; reviewedAtIso?: string; ruleSnapshot?: UserRules; issues?: string[]; remainingIssues?: string[]; scenarioLoss?: number; originalScenarioLoss?: number; durationSeconds?: number; evidence?: LiveEvidencePayload; quantVerification?: SavedQuantVerification; feedback?: TestFeedback };
+type DecisionResult = { stock: Stock; action: TradeAction; originalAmount: number; finalAmount: number; result: "已修改" | "维持计划" | "已延迟"; message: string; reason?: string; reasonStructure?: ReasonStructure; invalidation?: string; horizon?: string; reviewedAt?: string; reviewedAtIso?: string; ruleSnapshot?: UserRules; issues?: string[]; remainingIssues?: string[]; scenarioLoss?: number; originalScenarioLoss?: number; durationSeconds?: number; studySessionId?:string; evidence?: LiveEvidencePayload; quantVerification?: SavedQuantVerification; feedback?: TestFeedback };
 type ResearchDecisionContext = { reason: string; evidence?: LiveEvidencePayload; quantVerification?: SavedQuantVerification };
 
 type Stock = {
@@ -1199,8 +1199,8 @@ function DecisionView({ stock, action, rules, holdings, priorDecision, researchC
   const completeReview = (result: DecisionResult["result"], finalAmount: number, message: string) => {
     const completedAt = new Date();
     testSessionCompleted.current=true;
-    void fetch("/api/evaluation/user-study",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({eventType:"session",sessionId:testSessionId,status:"completed",durationSeconds})});
-    onDone({ stock, action, originalAmount: initialAmount, finalAmount, result, message, reason, reasonStructure, invalidation: invalid, horizon, reviewedAt: completedAt.toLocaleString("zh-CN", { month: "numeric", day: "2-digit", hour: "2-digit", minute: "2-digit" }), reviewedAtIso: completedAt.toISOString(), ruleSnapshot: rules, issues: [...originalIssues, ...quantIssues], remainingIssues: reviewIssues, scenarioLoss, originalScenarioLoss, durationSeconds, evidence: evidenceCheck, quantVerification: quantVerification ? { ...quantVerification, includedInDecision: true } : undefined });
+    void fetch("/api/evaluation/user-study",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({eventType:"session",sessionId:testSessionId,status:"task_completed",durationSeconds})});
+    onDone({ stock, action, originalAmount: initialAmount, finalAmount, result, message, reason, reasonStructure, invalidation: invalid, horizon, reviewedAt: completedAt.toLocaleString("zh-CN", { month: "numeric", day: "2-digit", hour: "2-digit", minute: "2-digit" }), reviewedAtIso: completedAt.toISOString(), ruleSnapshot: rules, issues: [...originalIssues, ...quantIssues], remainingIssues: reviewIssues, scenarioLoss, originalScenarioLoss, durationSeconds, studySessionId:testSessionId, evidence: evidenceCheck, quantVerification: quantVerification ? { ...quantVerification, includedInDecision: true } : undefined });
   };
   return (
     <main className="decision-layout view-enter" id="main-content">
@@ -1272,6 +1272,7 @@ function DecisionView({ stock, action, rules, holdings, priorDecision, researchC
 function DecisionResultView({ record, holdings, onDesk, onHistory, onResearch, onFeedback }: { record: DecisionResult; holdings: HoldingBook; onDesk: () => void; onHistory: () => void; onResearch: () => void; onFeedback: (feedback: TestFeedback) => Promise<{success:boolean;message:string}> }) {
   const [testerCode, setTesterCode] = useState(record.feedback?.testerCode ?? "");
   const [participantSegment,setParticipantSegment]=useState<ParticipantSegment|undefined>(record.feedback?.participantSegment);
+  const [participantRelation,setParticipantRelation]=useState<ParticipantRelation|undefined>(record.feedback?.participantRelation);
   const [satisfaction, setSatisfaction] = useState<number|undefined>(record.feedback?.satisfaction);
   const [riskUnderstood, setRiskUnderstood] = useState<boolean|undefined>(record.feedback?.riskUnderstood);
   const [riskExplanation,setRiskExplanation]=useState(record.feedback?.riskExplanation??"");
@@ -1294,8 +1295,8 @@ function DecisionResultView({ record, holdings, onDesk, onHistory, onResearch, o
   const officialEvidence = record.evidence?.radar?.official_count ?? 0;
   const unresolved = record.remainingIssues ?? [];
   const choice = record.result === "已延迟" ? "稍后再看" : record.result === "维持计划" ? `维持 ¥${record.originalAmount.toLocaleString()}` : `改为 ¥${record.finalAmount.toLocaleString()}`;
-  const feedbackComplete=Boolean(testerCode.trim()&&participantSegment&&satisfaction&&typeof riskUnderstood==="boolean"&&riskExplanation.trim().length>=8&&typeof repeatIntent==="boolean"&&typeof paidIntent==="boolean"&&feedbackConsent);
-  const submitFeedback=async()=>{if(!feedbackComplete||!participantSegment||!satisfaction||typeof riskUnderstood!=="boolean"||typeof repeatIntent!=="boolean"||typeof paidIntent!=="boolean")return;setFeedbackSaving(true);setFeedbackMessage("");const result=await onFeedback({testerCode,participantSegment,satisfaction,riskUnderstood,riskExplanation:riskExplanation.trim(),repeatIntent,paidIntent,confusingStep:confusingStep.trim(),consentedAtIso:new Date().toISOString(),submittedAtIso:new Date().toISOString()});setFeedbackSaving(false);setFeedbackSaved(result.success);setFeedbackMessage(result.message);};
+  const feedbackComplete=Boolean(testerCode.trim()&&participantSegment&&participantRelation&&satisfaction&&typeof riskUnderstood==="boolean"&&riskExplanation.trim().length>=8&&typeof repeatIntent==="boolean"&&typeof paidIntent==="boolean"&&feedbackConsent);
+  const submitFeedback=async()=>{if(!feedbackComplete||!participantSegment||!participantRelation||!satisfaction||typeof riskUnderstood!=="boolean"||typeof repeatIntent!=="boolean"||typeof paidIntent!=="boolean")return;setFeedbackSaving(true);setFeedbackMessage("");const result=await onFeedback({testerCode,participantSegment,participantRelation,satisfaction,riskUnderstood,riskExplanation:riskExplanation.trim(),repeatIntent,paidIntent,confusingStep:confusingStep.trim(),consentedAtIso:new Date().toISOString(),submittedAtIso:new Date().toISOString()});setFeedbackSaving(false);setFeedbackSaved(result.success);setFeedbackMessage(result.message);};
   return <main className="decision-result-page view-enter" id="main-content"><article className="workspace decision-result-workspace">
     <header className="decision-result-header"><div><span><CheckCircle2 />审查已记录 · 不会执行交易</span><h1>{record.stock.name} · 你选择了“{choice}”</h1><p>{record.message}。这张记录保留当时的规则、证据和个人判断，方便之后重新核实。</p></div><Badge variant="outline">{record.reviewedAt ?? "刚刚"}</Badge></header>
     <section className="decision-result-summary"><div><span>原计划</span><strong>¥{record.originalAmount.toLocaleString()}</strong><small>计划后 {originalRatio.toFixed(1)}% · 下跌 20% −¥{(record.originalScenarioLoss ?? Math.round(originalHolding * .2)).toLocaleString()}</small></div><ArrowRight /><div className="selected"><span>最终选择</span><strong>{record.result === "已延迟" ? "稍后再看" : `¥${record.finalAmount.toLocaleString()}`}</strong><small>{record.result === "已延迟" ? "没有改变当前持仓记录" : `计划后 ${finalRatio.toFixed(1)}% · 下跌 20% −¥${(record.scenarioLoss ?? Math.round(finalHolding * .2)).toLocaleString()}`}</small></div><div className="result-boundary"><span>个人单股上限</span><strong>{effectiveLimit.toFixed(1)}%</strong><small>{record.result === "已延迟" ? "下次继续时重新计算" : finalRatio > effectiveLimit ? `仍高 ${Math.max(0, finalRatio - effectiveLimit).toFixed(1)} 个百分点` : "未超过当前边界"}</small></div></section>
@@ -1306,6 +1307,7 @@ function DecisionResultView({ record, holdings, onDesk, onHistory, onResearch, o
       <div className="feedback-identity-row">
         <label><span>匿名编号</span><Input aria-label="匿名测试编号" value={testerCode} maxLength={20} placeholder="由主持人提供" onChange={(event)=>{setTesterCode(event.target.value.replace(/[^a-zA-Z0-9_-]/g,"").toUpperCase());setFeedbackSaved(false);}}/></label>
         <label><span>你的情况</span><select aria-label="参与者类型" value={participantSegment??""} onChange={(event)=>{setParticipantSegment(event.target.value as ParticipantSegment||undefined);setFeedbackSaved(false);}}><option value="">请选择</option>{PARTICIPANT_SEGMENTS.map((segment)=><option key={segment}>{segment}</option>)}</select></label>
+        <label><span>与项目的关系</span><select aria-label="与项目的关系" value={participantRelation??""} onChange={(event)=>{setParticipantRelation(event.target.value as ParticipantRelation||undefined);setFeedbackSaved(false);}}><option value="">请选择</option><option value="external">外部体验者</option><option value="team_member">团队成员或内部测试</option></select></label>
         <div><span>满意度</span><div className="feedback-score">{[1,2,3,4,5].map((score)=><button type="button" key={score} aria-pressed={satisfaction===score} className={satisfaction===score?"active":""} onClick={()=>{setSatisfaction(score);setFeedbackSaved(false);}}>{score}</button>)}</div></div>
       </div>
       <label className="feedback-risk-explanation"><span>请用自己的话写出这次看到的一个主要风险</span><Input aria-label="主要风险复述" value={riskExplanation} maxLength={300} placeholder="至少 8 个字；用于确认你是否真的理解" onChange={(event)=>{setRiskExplanation(event.target.value);setFeedbackSaved(false);}}/><small>{riskExplanation.trim().length}/8 字最低要求</small></label>
@@ -1512,9 +1514,10 @@ export default function Home({ authenticatedUser, initialView = "desk", initialC
   const saveTestFeedback = async (feedback: TestFeedback) => {
     if(!latestDecision)return{success:false,message:"没有可关联的审查记录。"};
     try{
-      const response=await fetch("/api/evaluation/user-study",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({reviewId:latestDecision.reviewedAtIso??`${latestDecision.stock.code}-${latestDecision.reviewedAt}`,testerCode:feedback.testerCode,participantSegment:feedback.participantSegment,result:latestDecision.result,durationSeconds:latestDecision.durationSeconds,satisfaction:feedback.satisfaction,riskUnderstood:feedback.riskUnderstood,riskExplanation:feedback.riskExplanation,repeatIntent:feedback.repeatIntent,paidIntent:feedback.paidIntent,confusingStep:feedback.confusingStep,consent:Boolean(feedback.consentedAtIso)})});
+      const response=await fetch("/api/evaluation/user-study",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({reviewId:latestDecision.reviewedAtIso??`${latestDecision.stock.code}-${latestDecision.reviewedAt}`,testerCode:feedback.testerCode,participantSegment:feedback.participantSegment,participantRelation:feedback.participantRelation,result:latestDecision.result,durationSeconds:latestDecision.durationSeconds,satisfaction:feedback.satisfaction,riskUnderstood:feedback.riskUnderstood,riskExplanation:feedback.riskExplanation,repeatIntent:feedback.repeatIntent,paidIntent:feedback.paidIntent,confusingStep:feedback.confusingStep,consent:Boolean(feedback.consentedAtIso)})});
       const body=await response.json() as {message?:string};
       if(!response.ok)throw new Error(body.message||"研究记录未保存");
+      if(latestDecision.studySessionId)await fetch("/api/evaluation/user-study",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({eventType:"session",sessionId:latestDecision.studySessionId,status:"feedback_submitted",durationSeconds:latestDecision.durationSeconds,participantRelation:feedback.participantRelation,participantSegment:feedback.participantSegment})});
       const updated={...latestDecision,feedback};setLatestDecision(updated);window.localStorage.setItem(LOCAL_DECISION_KEY,JSON.stringify(updated));setDecisionRecords((current)=>{const next=current.map((record)=>record.reviewedAtIso===latestDecision.reviewedAtIso?updated:record);window.localStorage.setItem(LOCAL_DECISIONS_KEY,JSON.stringify(next));return next;});showNotice("匿名测试反馈已保存");return{success:true,message:"已写入匿名研究记录；评测页会按真实提交汇总。"};
     }catch(error){return{success:false,message:error instanceof Error?error.message:"研究记录保存失败"};}
   };

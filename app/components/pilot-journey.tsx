@@ -5,7 +5,7 @@ import { ArrowRight, Check, CheckCircle2, Clock3, ShieldCheck, Users } from "luc
 
 import { DemoWalkthrough, type DemoOutcome } from "./demo-walkthrough";
 import { PilotEnrollment } from "./pilot-enrollment";
-import { PARTICIPANT_SEGMENTS, type ParticipantSegment } from "../lib/user-study-validation";
+import { PARTICIPANT_SEGMENTS, type ParticipantRelation, type ParticipantSegment } from "../lib/user-study-validation";
 import { pick, useI18n } from "../i18n";
 
 type Phase = "intro" | "task" | "feedback" | "offer";
@@ -16,10 +16,11 @@ const SEGMENT_LABELS: Record<ParticipantSegment, { zh: string; en: string; detai
   "近3个月主动交易": { zh: "近 3 个月有主动交易", en: "Active in the past 3 months", detailZh: "近期做过买入、补仓或卖出决定", detailEn: "Recently made a buy, add or sell decision" },
 };
 
-export function PilotJourney({ initialJoined = false }: { initialJoined?: boolean }) {
+export function PilotJourney({ initialJoined = false, initialJoinRelation }: { initialJoined?: boolean; initialJoinRelation?: ParticipantRelation }) {
   const { isEnglish } = useI18n();
   const [phase, setPhase] = useState<Phase>("intro");
   const [segment, setSegment] = useState<ParticipantSegment>();
+  const [relation, setRelation] = useState<ParticipantRelation>();
   const [outcome, setOutcome] = useState<DemoOutcome>();
   const [feedbackStep, setFeedbackStep] = useState(0);
   const [testerCode, setTesterCode] = useState("");
@@ -34,37 +35,44 @@ export function PilotJourney({ initialJoined = false }: { initialJoined?: boolea
   const [message, setMessage] = useState("");
   const sessionIdRef = useRef("");
   const startedAtRef = useRef(0);
-  const completedRef = useRef(false);
+  const sessionStartedRef = useRef(false);
+  const taskCompletedRef = useRef(false);
   const durationRef = useRef(0);
 
   useEffect(() => {
     const sessionId = `pilot-${crypto.randomUUID()}`;
     sessionIdRef.current = sessionId;
-    startedAtRef.current = Date.now();
     setTesterCode(`P-${sessionId.slice(-6).toUpperCase()}`);
-    void fetch("/api/evaluation/user-study", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ eventType: "session", sessionId, status: "started" }),
-    });
     return () => {
-      if (completedRef.current) return;
+      if (!sessionStartedRef.current || taskCompletedRef.current) return;
       const payload = JSON.stringify({ eventType: "session", sessionId, status: "abandoned" });
       if (navigator.sendBeacon) navigator.sendBeacon("/api/evaluation/user-study", new Blob([payload], { type: "application/json" }));
       else void fetch("/api/evaluation/user-study", { method: "POST", headers: { "content-type": "application/json" }, body: payload, keepalive: true });
     };
   }, []);
 
+  const startTask = () => {
+    if (!segment || !relation) return;
+    sessionStartedRef.current = true;
+    startedAtRef.current = Date.now();
+    setPhase("task");
+    void fetch("/api/evaluation/user-study", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ eventType: "session", sessionId: sessionIdRef.current, status: "started", participantRelation: relation, participantSegment: segment }),
+    });
+  };
+
   const completeTask = (nextOutcome: DemoOutcome) => {
     setOutcome(nextOutcome);
     setPhase("feedback");
-    if (!completedRef.current) {
-      completedRef.current = true;
+    if (!taskCompletedRef.current) {
+      taskCompletedRef.current = true;
       durationRef.current = Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1000));
       void fetch("/api/evaluation/user-study", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ eventType: "session", sessionId: sessionIdRef.current, status: "completed", durationSeconds: durationRef.current }),
+        body: JSON.stringify({ eventType: "session", sessionId: sessionIdRef.current, status: "task_completed", durationSeconds: durationRef.current, participantRelation: relation, participantSegment: segment }),
       });
     }
     requestAnimationFrame(() => document.querySelector(".pilot-feedback")?.scrollIntoView({ behavior: "smooth", block: "start" }));
@@ -75,7 +83,7 @@ export function PilotJourney({ initialJoined = false }: { initialJoined?: boolea
   const finalFeedbackComplete = typeof repeatIntent === "boolean" && typeof paidIntent === "boolean" && consent;
 
   const submitFeedback = async () => {
-    if (!segment || !outcome || !firstFeedbackComplete || !secondFeedbackComplete || !finalFeedbackComplete) return;
+    if (!segment || !relation || !outcome || !firstFeedbackComplete || !secondFeedbackComplete || !finalFeedbackComplete) return;
     setSaving(true);
     setMessage("");
     try {
@@ -86,6 +94,7 @@ export function PilotJourney({ initialJoined = false }: { initialJoined?: boolea
           reviewId: `pilot-demo-${sessionIdRef.current}`,
           testerCode,
           participantSegment: segment,
+          participantRelation: relation,
           result: outcome.result,
           durationSeconds: durationRef.current,
           satisfaction,
@@ -99,6 +108,15 @@ export function PilotJourney({ initialJoined = false }: { initialJoined?: boolea
       });
       const body = await response.json() as { message?: string };
       if (!response.ok) throw new Error(body.message ?? pick(isEnglish, "提交失败", "Submission failed"));
+      const sessionResponse = await fetch("/api/evaluation/user-study", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ eventType: "session", sessionId: sessionIdRef.current, status: "feedback_submitted", durationSeconds: durationRef.current, participantRelation: relation, participantSegment: segment }),
+      });
+      if (!sessionResponse.ok) {
+        const sessionBody = await sessionResponse.json().catch(() => ({})) as { message?: string };
+        throw new Error(sessionBody.message ?? pick(isEnglish, "反馈已保存，但流程状态同步失败，请重试", "Feedback was saved, but the study status did not sync. Please retry."));
+      }
       setPhase("offer");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : pick(isEnglish, "提交失败，请稍后重试", "Submission failed. Please try again."));
@@ -124,8 +142,12 @@ export function PilotJourney({ initialJoined = false }: { initialJoined?: boolea
       {phase === "intro" && <section className="pilot-intro">
         <header><span>{pick(isEnglish, "早期用户体验研究", "Early user study")}</span><h2>{pick(isEnglish, "完成一次交易前审查，约 5 分钟", "Complete one pre-trade review in about 5 minutes")}</h2><p>{pick(isEnglish, "没有标准答案。我们需要观察你是否能看懂风险，并允许你维持、修改或延迟原计划。", "There is no correct answer. We want to see whether the risks are understandable while allowing you to keep, change or delay the plan.")}</p></header>
         <div className="pilot-task-brief"><Clock3 /><span><strong>{pick(isEnglish, "你的任务", "Your task")}</strong><small>{pick(isEnglish, "检查一笔补仓计划，阅读证据与仓位影响，然后独立作出选择。", "Review an add-to-position plan, inspect its evidence and position impact, then make your own choice.")}</small></span></div>
+        <fieldset className="pilot-relation"><legend>{pick(isEnglish, "你与这个项目的关系", "Your relationship to this project")}</legend><div className="pilot-binary">{[
+          ["external", pick(isEnglish, "我是外部体验者", "I am an external participant")],
+          ["team_member", pick(isEnglish, "我是项目团队成员或内部测试者", "I am on the project team or testing internally")],
+        ].map(([value, label]) => <button type="button" key={value} className={relation === value ? "selected" : ""} aria-pressed={relation === value} onClick={() => setRelation(value as ParticipantRelation)}>{label}</button>)}</div><small>{pick(isEnglish, "团队内部记录会保留，但不会计入外部用户证据。", "Internal records are retained but excluded from external-user evidence.")}</small></fieldset>
         <fieldset><legend>{pick(isEnglish, "请选择最符合你的情况", "Choose the closest description")}</legend>{PARTICIPANT_SEGMENTS.map((item) => { const label = SEGMENT_LABELS[item]; return <button type="button" key={item} className={segment === item ? "selected" : ""} aria-pressed={segment === item} onClick={() => setSegment(item)}><Users /><span><strong>{isEnglish ? label.en : label.zh}</strong><small>{isEnglish ? label.detailEn : label.detailZh}</small></span>{segment === item && <CheckCircle2 />}</button>; })}</fieldset>
-        <button className="pilot-primary" disabled={!segment} onClick={() => setPhase("task")}>{pick(isEnglish, "开始体验任务", "Start the task")}<ArrowRight /></button>
+        <button className="pilot-primary" disabled={!segment || !relation} onClick={startTask}>{pick(isEnglish, "开始体验任务", "Start the task")}<ArrowRight /></button>
         <footer><ShieldCheck />{pick(isEnglish, "不收集姓名、联系方式、证券账户或真实资产。匿名会话用于统计完成与退出。", "No name, contact details, brokerage account or real assets are collected. Anonymous sessions measure completion and exits.")}</footer>
       </section>}
 
@@ -156,7 +178,7 @@ export function PilotJourney({ initialJoined = false }: { initialJoined?: boolea
         </div>}
       </section>}
 
-      {phase === "offer" && <section className="pilot-offer-stage"><header><CheckCircle2 /><span><strong>{pick(isEnglish, "匿名反馈已保存", "Anonymous feedback saved")}</strong><small>{pick(isEnglish, "下面的价格方案与反馈分开记录。加入候补不会扣费。", "The price offer is recorded separately from feedback. Joining does not charge you.")}</small></span></header><PilotEnrollment initialJoined={initialJoined} /></section>}
+      {phase === "offer" && relation && <section className="pilot-offer-stage"><header><CheckCircle2 /><span><strong>{pick(isEnglish, "匿名反馈已保存", "Anonymous feedback saved")}</strong><small>{pick(isEnglish, "下面的价格方案与反馈分开记录。加入候补不会扣费。", "The price offer is recorded separately from feedback. Joining does not charge you.")}</small></span></header><PilotEnrollment initialJoined={initialJoined&&initialJoinRelation===relation} participantRelation={relation} /></section>}
     </div>
   );
 }

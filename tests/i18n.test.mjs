@@ -59,10 +59,20 @@ test("keeps the course evidence center usable in English",()=>{
   const sources=read("app/components/data-source-evaluation-runner.tsx");
   assert.match(page,/Current reproducible baseline/);
   assert.match(page,/Cross-user evidence/);
-  assert.match(page,/Core task funnel/);
-  assert.match(page,/Behavioral price test/);
+  assert.match(page,/External-user task funnel/);
+  assert.match(page,/deduplicated participants/);
+  assert.match(page,/attitude response, not a waitlist or revenue event/);
+  assert.match(page,/External-user behavioral price test/);
   assert.match(page,/What must be validated next/);
   assert.match(model,/Fixed real-model task set/);
   assert.match(agent,/Three Agent functional tasks/);
   assert.match(sources,/Live data-route sampling/);
+});
+
+test("keeps the behavioral price offer usable in English",()=>{
+  const offer=read("app/components/pilot-enrollment.tsx");
+  assert.match(offer,/Weekly portfolio decision review/);
+  assert.match(offer,/Single-price experiment · no payment connection/);
+  assert.match(offer,/Join the 14-day paid test/);
+  assert.match(offer,/A waitlist is not a subscription/);
 });
