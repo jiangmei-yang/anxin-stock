@@ -119,7 +119,26 @@ test("provides a clearly labelled 90-second teaching walkthrough",()=>{
   assert.match(demo,/demo-reason-options/);
   assert.match(demo,/不连接券商/);
   assert.match(demo,/afterWeight/);
+  assert.match(demo,/维持原计划/);
+  assert.match(demo,/"已修改" \| "维持计划" \| "已延迟"/);
+  assert.match(demo,/完成任务并填写匿名反馈/);
   assert.match(page,/90 秒产品演示/);
+});
+
+test("gives external participants one neutral task-to-feedback-to-offer journey",()=>{
+  const page=read("app/pilot/page.tsx");
+  const journey=read("app/components/pilot-journey.tsx");
+  assert.match(page,/PilotJourney/);
+  assert.match(page,/早期用户体验研究/);
+  assert.match(journey,/PARTICIPANT_SEGMENTS/);
+  assert.match(journey,/DemoWalkthrough onComplete/);
+  assert.match(journey,/status: "started"/);
+  assert.match(journey,/status: "completed"/);
+  assert.match(journey,/status: "abandoned"/);
+  assert.match(journey,/没有标准答案/);
+  assert.match(journey,/没有预选答案/);
+  assert.match(journey,/只有下一页主动加入候补才算行为证据/);
+  assert.match(journey,/PilotEnrollment/);
 });
 
 test("uses an action-based pricing experiment instead of counting an attitude question as revenue",()=>{

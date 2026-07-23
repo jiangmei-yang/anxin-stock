@@ -53,12 +53,18 @@ const REASONS = [
   },
 ] as const;
 
-export function DemoWalkthrough() {
+export type DemoOutcome = {
+  result: "已修改" | "维持计划" | "已延迟";
+  amount: number;
+  finalAmount: number;
+};
+
+export function DemoWalkthrough({ onComplete }: { onComplete?: (outcome: DemoOutcome) => void } = {}) {
   const { isEnglish, locale } = useI18n();
   const [step, setStep] = useState(0);
   const [amount, setAmount] = useState(50_000);
   const [reasonId, setReasonId] = useState<(typeof REASONS)[number]["id"]>("rumor");
-  const [choice, setChoice] = useState<"reduce" | "delay" | null>(null);
+  const [choice, setChoice] = useState<"reduce" | "maintain" | "delay" | null>(null);
 
   const steps = isEnglish
     ? ["Set the plan", "Choose the reason", "Review the checks", "Make your decision"]
@@ -73,8 +79,8 @@ export function DemoWalkthrough() {
   const scenarioLoss = afterValue * 0.2;
   const overLimit = Math.max(0, afterWeight - limit);
   const reducedAmount = Math.max(0, capital * limit - current);
-  const finalAmount = choice === "reduce" ? Math.min(amount, reducedAmount) : 0;
-  const finalWeight = choice === "reduce" ? (current + finalAmount) / capital : current / capital;
+  const finalAmount = choice === "reduce" ? Math.min(amount, reducedAmount) : choice === "maintain" ? amount : 0;
+  const finalWeight = choice === "reduce" || choice === "maintain" ? (current + finalAmount) / capital : current / capital;
   const money = (value: number) => new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "CNY",
@@ -282,6 +288,14 @@ export function DemoWalkthrough() {
                   `Planned amount becomes ${money(Math.min(amount, reducedAmount))}`,
                 )}</small>
               </button>
+              <button className={choice === "maintain" ? "selected" : ""} onClick={() => setChoice("maintain")}>
+                <strong>{pick(isEnglish, "维持原计划", "Keep the original plan")}</strong>
+                <small>{pick(
+                  isEnglish,
+                  "保留原金额；在反馈中说明为什么这些风险没有改变你的判断",
+                  "Keep the original amount and explain why the risks did not change your decision",
+                )}</small>
+              </button>
               <button className={choice === "delay" ? "selected" : ""} onClick={() => setChoice("delay")}>
                 <strong>{pick(isEnglish, "稍后再看", "Review later")}</strong>
                 <small>{pick(
@@ -301,6 +315,8 @@ export function DemoWalkthrough() {
                         `计划金额减少 ${money(amount - finalAmount)}`,
                         `Planned amount reduced by ${money(amount - finalAmount)}`,
                       )
+                    : choice === "maintain"
+                      ? pick(isEnglish, "你选择维持原计划", "You chose to keep the original plan")
                     : pick(isEnglish, "本次计划已延迟", "The plan has been delayed")}</strong>
                   <span>{pick(isEnglish, "计划后占比", "After-plan weight")} {(afterWeight * 100).toFixed(0)}% → {pick(isEnglish, "最终", "final")} {(finalWeight * 100).toFixed(0)}%</span>
                   <small>{pick(
@@ -309,6 +325,11 @@ export function DemoWalkthrough() {
                     "You completed the full loop: information → verification → personal impact → your decision.",
                   )}</small>
                 </div>
+                {onComplete && <button className="demo-complete-task" onClick={() => onComplete({
+                  result: choice === "reduce" ? "已修改" : choice === "maintain" ? "维持计划" : "已延迟",
+                  amount,
+                  finalAmount,
+                })}>{pick(isEnglish, "完成任务并填写匿名反馈", "Complete the task and give anonymous feedback")}<ArrowRight /></button>}
               </div>
             )}
           </section>
