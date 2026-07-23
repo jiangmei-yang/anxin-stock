@@ -1818,7 +1818,7 @@ svg { stroke-width: 1.8; }
 .personal-sidebar > nav a svg { width: 17px; }.personal-sidebar > nav a:hover { background: var(--muted); color: var(--foreground); }.personal-sidebar > nav a.active { background: var(--secondary); color: var(--primary); }
 .personal-account { margin-top: auto; min-height: 70px; padding: 12px 14px; display: grid; grid-template-columns: 32px 1fr 28px; align-items: center; gap: 9px; border-top: 1px solid var(--border); }
 .personal-account > span { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--gold-soft); color: var(--gold-strong); font-weight: 750; }.personal-account strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }.personal-account > a { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--muted-foreground); }.personal-account > a:hover { background: var(--muted); }.personal-account svg { width: 15px; }
-.personal-main { min-width: 0; display: flex; flex-direction: column; }
+.personal-main { grid-column: 2; min-width: 0; display: flex; flex-direction: column; }
 .personal-topbar { position: sticky; top: 0; z-index: 12; min-height: 64px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--background), transparent 5%); backdrop-filter: blur(16px); }
 .personal-topbar > div:first-child { display: flex; align-items: center; gap: 8px; }.personal-topbar > div:first-child span { color: var(--muted-foreground); font-size: 12px; }.personal-topbar > div:first-child strong { font-size: 14px; }.personal-theme-label { display: inline-flex; align-items: center; gap: 4px; padding-left: 8px; border-left: 1px solid var(--border); }.personal-theme-label svg { width: 13px; }
 .personal-top-actions { display: flex; align-items: center; gap: 8px; }.personal-top-actions > a, .personal-top-actions summary { height: 34px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--foreground); text-decoration: none; font-size: 12px; font-weight: 600; list-style: none; }.personal-top-actions svg { width: 14px; }.personal-top-actions details { position: relative; }.personal-top-actions details > div { position: absolute; top: 41px; right: 0; z-index: 20; width: 280px; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); box-shadow: 0 14px 36px color-mix(in oklch, var(--foreground), transparent 88%); color: var(--muted-foreground); font-size: 12px; line-height: 1.6; }
@@ -2041,6 +2041,14 @@ svg { stroke-width: 1.8; }
   .native-tool-nav svg { width: 19px; height: 19px; }
   .native-tool-header { left: var(--rail-width); height: var(--header-height); }
   .native-tool-main { min-height: calc(100vh - var(--header-height)); }
+}
+
+/* The desktop product intentionally keeps its navigation rail at narrow browser widths. */
+@media (max-width: 900px) {
+  .personal-shell { grid-template-columns: var(--rail-width) minmax(0, 1fr); padding-bottom: 0; }
+  .personal-main { grid-column: 2; }
+  .unified-sidebar { display: flex; }
+  .personal-mobile-nav { display: none; }
 }
 
 /* Goal-to-Workspace Agent: dense enough for research, calm enough for decisions. */

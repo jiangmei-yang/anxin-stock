@@ -50,6 +50,9 @@ test("keeps theme, local signal evidence, and four-step precheck in the workbenc
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.match(css, /One desktop frame across the workbench, research desk, and analysis tools/);
   assert.match(css, /\.personal-shell \{ grid-template-columns: var\(--rail-width\)/);
+  assert.match(css, /\.personal-main \{ grid-column: 2;/);
+  assert.match(css, /desktop product intentionally keeps its navigation rail at narrow browser widths/);
+  assert.match(css, /@media \(max-width: 900px\)[\s\S]*?\.personal-shell \{ grid-template-columns: var\(--rail-width\) minmax\(0, 1fr\); padding-bottom: 0; \}[\s\S]*?\.personal-main \{ grid-column: 2; \}/);
   assert.match(css, /\.native-tool-shell \{ padding: var\(--header-height\) 0 0 var\(--rail-width\)/);
   assert.match(component, /请粘贴至少一句完整说法/);
   assert.match(component, /请至少写清一项仓位边界/);
