@@ -178,14 +178,18 @@ test("blocks model evaluation when only rule mode is available", async () => {
   assert.match(body.message, /规则模式不能生成模型评测分数/);
 });
 
-test("server-renders one measurable pricing hypothesis without a payment claim", async () => {
+test("server-renders a neutral pilot task before revealing the measurable pricing hypothesis", async () => {
   const response = await render("/pilot");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /每周持仓判断复核/);
-  assert.match(html, /¥19/);
-  assert.match(html, /加入 14 天付费测试/);
-  assert.match(html, /候补不会扣费/);
+  const enrollment = await readFile(new URL("../app/components/pilot-enrollment.tsx", import.meta.url), "utf8");
+  assert.match(html, /早期用户体验研究/);
+  assert.match(html, /完成一次交易前审查，约 5 分钟/);
+  assert.match(html, /允许你维持、修改或延迟原计划/);
+  assert.match(enrollment, /每周持仓判断复核/);
+  assert.match(enrollment, /priceMonthly:19/);
+  assert.match(enrollment, /加入 14 天付费测试/);
+  assert.match(enrollment, /不会自动扣费/);
 });
 
 test("keeps AI keys server-only and applies per-user provider priority", async () => {
