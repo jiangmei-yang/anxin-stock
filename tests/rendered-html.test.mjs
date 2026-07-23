@@ -49,6 +49,8 @@ test("puts recorded personal decisions before the default stock chart", async ()
   assert.ok(stockWatch > commonActions);
   assert.match(html, /没有提醒不等于没有风险/);
   assert.match(html, /最大持仓/);
+  assert.match(html, /组合观察/);
+  assert.match(html, /示例标的不计入持仓与风险计算/);
 });
 
 test("keeps onboarding contextual and navigation grouped by user goal", async () => {
@@ -89,6 +91,8 @@ test("keeps onboarding contextual and navigation grouped by user goal", async ()
   assert.match(workbench, /chartMode/);
   assert.match(workbench, /candlestick/);
   assert.match(workbench, /chartSize/);
+  assert.match(workbench, /switcherAssets/);
+  assert.match(workbench, /Examples do not affect portfolio or risk calculations/);
   assert.match(workbench, /chartFullscreen/);
   assert.match(workbench, /setLockedIndex/);
   assert.match(workbench, /点击固定/);

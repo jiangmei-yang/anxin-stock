@@ -160,7 +160,7 @@ function HomeSurface({ snapshot, profile, workspace }: { snapshot: Snapshot; pro
       </div>
     </section>
 
-    <HomeStockFocus key={preferredStock.code} initialStock={preferredStock} context={largestEntry ? "largest_holding" : "default"} />
+    <HomeStockFocus key={preferredStock.code} initialStock={preferredStock} context={largestEntry ? "largest_holding" : "default"} holdings={holdings} total={total} />
     {total > 0 && <section className="home-portfolio-strip" aria-label={pick(isEnglish, "组合摘要", "Portfolio summary")}><PortfolioOverviewMini total={total} holdings={holdings}/><Link href="/portfolio">{pick(isEnglish, "查看集中度与行业暴露", "View concentration and sector exposure")}<ArrowRight/></Link></section>}
     {profile && largest && largestWeight > profile.maxSingleWeight && <section className="home-priority-alert"><RiskInbox profile={profile} largest={largest} largestWeight={largestWeight}/></section>}
   </div>;
@@ -207,7 +207,7 @@ function HomeDecisionBrief({ snapshot, profile, total, largest, largestWeight }:
 
 const DEFAULT_HOME_STOCK:StockSearchItem={code:"600519",name:"贵州茅台",industry:"消费"};
 
-function HomeStockFocus({ initialStock, context }: { initialStock: StockSearchItem; context: "largest_holding" | "default" }){
+function HomeStockFocus({ initialStock, context, holdings, total }: { initialStock: StockSearchItem; context: "largest_holding" | "default"; holdings: Record<string, Holding>; total: number }){
   const { isEnglish, locale } = useI18n();
   const [stock,setStock]=useState<StockFocus>({status:"loading",points:[]});
   const [selectedStock,setSelectedStock]=useState<StockSearchItem>(initialStock);
@@ -247,6 +247,14 @@ function HomeStockFocus({ initialStock, context }: { initialStock: StockSearchIt
   const updated=stock.dataTimestamp?new Date(stock.dataTimestamp).toLocaleDateString(locale,{month:"numeric",day:"numeric"}):"";
   const displayedName=stock.name||(selectedStock.code===DEFAULT_HOME_STOCK.code?pick(isEnglish,"贵州茅台","Kweichow Moutai"):selectedStock.name);
   const industryLabel=(item:StockSearchItem)=>item.industry&&!/(数据不足|行业待载入|industry pending)/i.test(item.industry)?item.industry:pick(isEnglish,"A 股","A-share");
+  const recordedAssets = Object.entries(holdings).map(([code,item])=>({code,name:item.name||code,industry:item.industry,value:Number(item.value||0),isExample:false})).sort((a,b)=>b.value-a.value);
+  const exampleAssets = [
+    {code:"600519",name:pick(isEnglish,"贵州茅台","Kweichow Moutai"),industry:pick(isEnglish,"消费","Consumer")},
+    {code:"600183",name:pick(isEnglish,"生益科技","Shengyi Technology"),industry:pick(isEnglish,"电子","Electronics")},
+    {code:"300750",name:pick(isEnglish,"宁德时代","CATL"),industry:pick(isEnglish,"新能源","New energy")},
+    {code:"600036",name:pick(isEnglish,"招商银行","China Merchants Bank"),industry:pick(isEnglish,"银行","Banking")},
+  ].filter(item=>!recordedAssets.some(recorded=>recorded.code===item.code)).map(item=>({...item,value:0,isExample:true}));
+  const switcherAssets = recordedAssets.length>=2 ? recordedAssets.slice(0,6) : [...recordedAssets,...exampleAssets].slice(0,4);
   const submitStockSearch=()=>{const exact=stockResults.find(item=>item.code===stockQuery.trim());const candidate=exact??stockResults[0]??(/^\d{6}$/.test(stockQuery.trim())?{code:stockQuery.trim(),name:stockQuery.trim()}:undefined);if(candidate)chooseStock(candidate);};
   return <section className={`home-stock-focus chart-size-${chartSize}${chartFullscreen?" chart-fullscreen":""}`} aria-label={pick(isEnglish, "股票观察", "Stock watch")} data-guide="stock-focus">
     <header>
@@ -266,6 +274,10 @@ function HomeStockFocus({ initialStock, context }: { initialStock: StockSearchIt
       {stockSearchStatus==="error"&&<span>{pick(isEnglish,"名称搜索暂不可用；仍可直接输入 6 位代码。","Name search is unavailable; a 6-digit code still works.")}</span>}
     </div>}
     <div className="home-stock-summary"><div><span>{pick(isEnglish, `${rangeDays} 日收益`, `${rangeDays}-day return`)}</span><strong className={periodChange>0?"up":periodChange<0?"down":"flat"}>{periodChange>0?"+":""}{periodChange.toFixed(1)}%</strong></div><div><span>{pick(isEnglish, "相对沪深 300", "Vs CSI 300")}</span><strong className={(relativePerformance??0)>0?"up":(relativePerformance??0)<0?"down":"flat"}>{relativePerformance===null?"—":`${relativePerformance>0?"+":""}${relativePerformance.toFixed(1)}%`}</strong></div><div><span>{pick(isEnglish, `距 ${rangeDays} 日高点`, `From ${rangeDays}-day high`)}</span><strong className={drawdownFromHigh<0?"down":"flat"}>{drawdownFromHigh.toFixed(1)}%</strong></div><div><span>{pick(isEnglish, "相对 20 日均线", "Vs 20-day average")}</span><strong>{latestMa20?`${ma20Gap>0?"+":""}${ma20Gap.toFixed(1)}%`:"—"}</strong></div><div><span>{pick(isEnglish, "成交活跃度", "Volume activity")}</span><strong>{volumeRatio?`${volumeRatio.toFixed(1)}× ${pick(isEnglish, "20日均量", "20d average")}`:"—"}</strong></div></div>
+    <section className="home-holding-switcher" aria-label={pick(isEnglish,"持仓与示例观察","Holdings and example watchlist")}>
+      <header><div><strong>{pick(isEnglish,"组合观察","Portfolio watch")}</strong><span>{recordedAssets.length>=2?pick(isEnglish,`${recordedAssets.length} 个已记录持仓`,`${recordedAssets.length} recorded holdings`):pick(isEnglish,"示例标的不计入持仓与风险计算","Examples do not affect portfolio or risk calculations")}</span></div><Link href="/portfolio">{pick(isEnglish,"管理持仓","Manage holdings")}<ArrowRight/></Link></header>
+      <div>{switcherAssets.map(item=><button key={item.code} className={selectedStock.code===item.code?"active":undefined} onClick={()=>chooseStock({code:item.code,name:item.name,industry:item.industry})}><span><strong>{item.name}</strong><small>{item.code} · {item.industry||pick(isEnglish,"行业待补充","Sector pending")}</small></span>{item.isExample?<em>{pick(isEnglish,"示例","Example")}</em>:<b>{total?percent(item.value/total):"—"}</b>}</button>)}</div>
+    </section>
     <div className="home-stock-body">
       <div className="home-stock-chart">
         <div className="home-chart-toolbar">

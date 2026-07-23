@@ -23,6 +23,8 @@ The stock panel was also exercised as a real control rather than accepted from s
 - a pinned point exposes date, open, high, low, close, daily change, range, MA5, MA20, CSI 300 comparisons and volume;
 - the page has no horizontal overflow at a 1,600 px desktop viewport.
 
+The main chart is now paired with a portfolio switcher. Accounts with several holdings see up to six recorded assets ordered by recorded value. Accounts with zero or one holding receive clearly labelled example watch assets so a classroom demo can show multi-asset research without writing fictional positions into the user's portfolio or risk calculations.
+
 ## Score impact
 
 This improves activation and repeat-use plausibility, but it does not create external validation evidence. The local candidate remains **86/100** until real users complete the flow and provide auditable behavioural evidence.
