@@ -72,7 +72,12 @@ test("keeps onboarding contextual and navigation grouped by user goal", async ()
   assert.match(workbench, /setRangeDays/);
   assert.match(workbench, /home-chart-tooltip/);
   assert.match(workbench, /moveHoverByKey/);
-  assert.match(workbench, /Maximize2/);
+  assert.match(workbench, /chartMode/);
+  assert.match(workbench, /candlestick/);
+  assert.match(workbench, /chartSize/);
+  assert.match(workbench, /showMa5/);
+  assert.match(workbench, /hoveredAmplitude/);
+  assert.match(workbench, /开盘/);
   assert.match(workbench, /published_at/);
   assert.match(workbench, /Shanghai Composite/);
   assert.doesNotMatch(workbench, /怎么看这张图/);
