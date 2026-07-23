@@ -8,7 +8,7 @@ async function render(path = "/", init = {}) {
   const { default: worker } = await workerPromise;
 
   return worker.fetch(
-    new Request(`http://localhost${path}`, { headers: { accept: "text/html", "oai-authenticated-user-email": "tester@example.com", ...(init.headers ?? {}) }, ...init }),
+    new Request(`http://localhost${path}`, { ...init, headers: { accept: "text/html", "oai-authenticated-user-email": "tester@example.com", ...(init.headers ?? {}) } }),
     { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
     { waitUntil() {}, passThroughOnException() {} },
   );
@@ -222,6 +222,22 @@ test("routes assistant questions through the general Goal-to-Workflow planner", 
   assert.doesNotMatch(server, /const answers\s*=/);
   assert.match(route, /history/);
   assert.match(route, /slice\(-10\)/);
+});
+
+test("separates ambitious goals from order execution and return guarantees", async () => {
+  const [agent, assistant] = await Promise.all([
+    readFile(new URL("../app/lib/agent-os.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/lib/assistant-server.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(agent, /export function classifyGoalRisk/);
+  assert.match(agent, /const execution=/);
+  assert.match(agent, /const asksForGuarantee=/);
+  assert.match(agent, /const ambitiousTarget=/);
+  assert.match(agent, /ambitiousTarget\)return \{level:"high"/);
+  assert.match(agent, /A user's ambitious goal is not a request for the platform to promise returns/);
+  assert.match(assistant, /high_risk_goal_clarification/);
+  assert.match(assistant, /不能当作可保证的计划/);
+  assert.match(assistant, /先做纸面模拟/);
 });
 
 test("mounts one global AI assistant across every product route", async () => {
