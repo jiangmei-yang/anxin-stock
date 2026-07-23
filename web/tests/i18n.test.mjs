@@ -91,3 +91,18 @@ test("keeps the core stock research and evidence path usable in English",()=>{
   assert.match(page,/Position and downside scenarios are calculated next/);
   assert.match(page,/Data and sources/);
 });
+
+test("keeps all six stock research views operable in English",()=>{
+  const page=read("app/client-page.tsx");
+  const financial=read("app/components/financial-health-panel.tsx");
+  assert.match(financial,/Financial statement cross-checks/);
+  assert.match(financial,/Data and methodology/);
+  assert.match(financial,/Interpretation boundary/);
+  assert.match(page,/Quantitative verification/);
+  assert.match(page,/Generate test conditions/);
+  assert.match(page,/Stability checks/);
+  assert.match(page,/Research summary/);
+  assert.match(page,/Market signals/);
+  assert.match(page,/What to verify next/);
+  assert.match(page,/What change would invalidate the thesis/);
+});
