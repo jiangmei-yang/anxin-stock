@@ -163,7 +163,9 @@ test("server-renders an honest evaluation center and reproducible classroom demo
   assert.match(evaluationHtml, /20 项基线通过/);
   assert.match(evaluationHtml, /真实模型评测/);
   assert.match(evaluationHtml, /跨用户证据/);
-  assert.match(evaluationHtml, /位匿名参与者/);
+  assert.match(evaluationHtml, /位去重参与者/);
+  assert.match(evaluationHtml, /只统计明确标记为外部体验者的记录/);
+  assert.match(evaluationHtml, /态度题，不计作候补或收入/);
   assert.match(evaluationHtml, /打开 90 秒演示/);
   assert.match(demoHtml, /可操作教学场景/);
   assert.match(demoHtml, /你准备补仓多少钱/);

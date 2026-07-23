@@ -1234,7 +1234,7 @@ svg { stroke-width: 1.8; }
 .decision-test-feedback label, .feedback-identity-row > div, .feedback-binary-grid > div { display: flex; flex-direction: column; gap: 7px; }
 .decision-test-feedback input, .decision-test-feedback select { height: 36px; }
 .decision-test-feedback select { padding: 0 10px; border: 1px solid var(--input); border-radius: 7px; background: var(--card); color: var(--foreground); }
-.feedback-identity-row { display: grid; grid-template-columns: 160px minmax(210px,1fr) 156px; gap: 14px; }
+.feedback-identity-row { display: grid; grid-template-columns: 150px minmax(190px,1fr) minmax(210px,1fr) 156px; gap: 14px; }
 .feedback-score { display: flex; }
 .feedback-score button { width: 30px; height: 36px; border: 1px solid var(--border); border-right: 0; background: var(--card); color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
 .feedback-score button:first-child { border-radius: 7px 0 0 7px; }
@@ -1709,7 +1709,7 @@ svg { stroke-width: 1.8; }
   .privacy-grid { grid-template-columns: 1fr; }
   .privacy-grid > section:first-child { border-right: 0; border-bottom: 1px solid var(--border); }
   .decision-test-feedback { padding-inline: 22px; }
-  .feedback-identity-row { grid-template-columns: 150px minmax(180px,1fr) 156px; }
+  .feedback-identity-row { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 
 /* Quant verification extends the research dossier without introducing another visual system. */

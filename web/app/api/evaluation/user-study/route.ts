@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {deleteCurrentUserStudyData,exportCurrentUserStudyCsv,exportCurrentUserStudySessionsCsv,readUserStudySummary,saveUserStudyEvent,saveUserStudySession} from "@/app/lib/user-study";
-import {validateStudyInput,type StudyInput} from "@/app/lib/user-study-validation";
+import {PARTICIPANT_RELATIONS,PARTICIPANT_SEGMENTS,validateStudyInput,type StudyInput} from "@/app/lib/user-study-validation";
 
 export async function GET(request:Request){
   try{
@@ -15,7 +15,9 @@ export async function POST(request:Request){
   let body:Record<string,unknown>;
   try{body=await request.json() as Record<string,unknown>;}catch{return NextResponse.json({message:"请求格式无效"},{status:400});}
   if(body.eventType==="session"){
-    if(!body.sessionId||!["started","completed","abandoned"].includes(String(body.status)))return NextResponse.json({message:"测试会话事件无效"},{status:422});
+    if(typeof body.sessionId!=="string"||body.sessionId.length<4||body.sessionId.length>160||!["started","task_completed","feedback_submitted","abandoned"].includes(String(body.status)))return NextResponse.json({message:"测试会话事件无效"},{status:422});
+    if(body.participantRelation!==undefined&&!PARTICIPANT_RELATIONS.includes(body.participantRelation as never))return NextResponse.json({message:"样本关系无效"},{status:422});
+    if(body.participantSegment!==undefined&&!PARTICIPANT_SEGMENTS.includes(body.participantSegment as never))return NextResponse.json({message:"参与者类型无效"},{status:422});
     try{return NextResponse.json(await saveUserStudySession(body as Parameters<typeof saveUserStudySession>[0]));}catch(error){return NextResponse.json({status:"failed",message:error instanceof Error?error.message:"测试会话保存失败"},{status:503});}
   }
   let clean:StudyInput;
