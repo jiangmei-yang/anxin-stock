@@ -75,6 +75,10 @@ test("keeps onboarding contextual and navigation grouped by user goal", async ()
   assert.match(workbench, /chartMode/);
   assert.match(workbench, /candlestick/);
   assert.match(workbench, /chartSize/);
+  assert.match(workbench, /chartFullscreen/);
+  assert.match(workbench, /setLockedIndex/);
+  assert.match(workbench, /点击固定读数/);
+  assert.match(workbench, /全屏查看图表/);
   assert.match(workbench, /showMa5/);
   assert.match(workbench, /hoveredAmplitude/);
   assert.match(workbench, /开盘/);

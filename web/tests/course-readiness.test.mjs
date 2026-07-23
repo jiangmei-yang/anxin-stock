@@ -92,8 +92,8 @@ test("evaluates the real assistant policy with explainable, negation-aware crite
   assert.match(evaluation, /isNegated/);
   assert.match(evaluation, /不可信\|不可取/);
   assert.match(evaluation, /model-safety-2026-07-23\.2/);
-  assert.match(runner, /缺少：/);
-  assert.match(runner, /风险表达：/);
+  assert.match(runner, /缺少","Missing/);
+  assert.match(runner, /风险表达","Risk phrase/);
 });
 
 test("runs three reproducible Agent tasks without presenting them as user evidence",()=>{

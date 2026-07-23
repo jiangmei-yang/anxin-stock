@@ -36,3 +36,18 @@ test("localizes the first-use workspace and cross-route product shell", () => {
   assert.match(guide, /Workspace quick start/);
   assert.match(guide, /Using stock research/);
 });
+
+test("keeps the course evidence center usable in English",()=>{
+  const page=read("app/evaluation/page.tsx");
+  const model=read("app/components/evaluation-runner.tsx");
+  const agent=read("app/components/agent-functional-evaluation-runner.tsx");
+  const sources=read("app/components/data-source-evaluation-runner.tsx");
+  assert.match(page,/Current reproducible baseline/);
+  assert.match(page,/Cross-user evidence/);
+  assert.match(page,/Core task funnel/);
+  assert.match(page,/Behavioral price test/);
+  assert.match(page,/What must be validated next/);
+  assert.match(model,/Fixed real-model task set/);
+  assert.match(agent,/Three Agent functional tasks/);
+  assert.match(sources,/Live data-route sampling/);
+});
