@@ -2230,6 +2230,7 @@ svg { stroke-width: 1.8; }
 .agent-intent-grid small { color: var(--muted-foreground); font-size: 12px; }
 .agent-intent-grid strong { font-size: 17px; letter-spacing: -.02em; }
 .agent-missing { padding: 10px 16px; border-top: 1px solid var(--border); background: color-mix(in oklch, var(--gold-soft), transparent 55%); }
+.agent-missing > strong { display: block; margin-bottom: 5px; font-size: 12px; }
 .agent-missing p, .agent-warnings p { margin: 3px 0; display: flex; align-items: flex-start; gap: 7px; color: var(--muted-foreground); font-size: 12px; line-height: 1.55; }
 .agent-missing svg, .agent-warnings svg { width: 14px; height: 14px; margin-top: 2px; flex: 0 0 auto; color: var(--gold-strong); }
 .agent-plan { grid-row: span 2; }
@@ -2254,6 +2255,34 @@ svg { stroke-width: 1.8; }
 .agent-result { grid-column: 1 / -1; }
 .agent-result > article { display: grid; grid-template-columns: 220px minmax(0,1fr); gap: 16px; }
 .agent-result article p { margin: 0; }
+.agent-result > .agent-risk-result { display: block; padding: 16px; }
+.agent-result > .agent-research-result { display: block; padding: 16px; }
+.agent-key-findings { margin: 12px 15px 2px; padding: 13px 15px; border: 1px solid color-mix(in oklch,var(--primary),transparent 72%); border-radius: 10px; background: color-mix(in oklch,var(--secondary),transparent 35%); }
+.agent-key-findings > span { color: var(--primary); font-size: 12px; font-weight: 750; }
+.agent-key-findings ol { margin: 7px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.65; }
+.agent-result-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.agent-result-title strong { font-family: inherit !important; font-size: 15px !important; }
+.agent-result-title span, .agent-result-note { color: var(--muted-foreground); font-size: 12px; }
+.agent-risk-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.agent-risk-metrics > div { min-width: 0; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; border-right: 1px solid var(--border); background: color-mix(in oklch,var(--card),var(--secondary) 16%); }
+.agent-risk-metrics > div:last-child { border-right: 0; }
+.agent-risk-metrics small, .agent-risk-metrics span { color: var(--muted-foreground); font-size: 12px; }
+.agent-risk-metrics b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.agent-risk-result ul { margin: 12px 0 8px; padding-left: 18px; color: var(--foreground); font-size: 12px; line-height: 1.65; }
+.agent-result-note { display: block; }
+.agent-check-list, .agent-announcement-list { margin: 10px 0 12px; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.agent-check-list li, .agent-announcement-list li { padding: 11px 13px; border-bottom: 1px solid var(--border); }
+.agent-check-list li:last-child, .agent-announcement-list li:last-child { border-bottom: 0; }
+.agent-check-list li { display: grid; grid-template-columns: 120px minmax(0,1fr); gap: 3px 12px; }
+.agent-check-list b { grid-row: 1 / 3; font-size: 12px; }
+.agent-check-list b[data-state="attention"], .agent-check-list b[data-state="watch"] { color: var(--gold-strong); }
+.agent-check-list span { font-size: 12px; }
+.agent-check-list small { color: var(--muted-foreground); font-size: 12px; }
+.agent-announcement-list li { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.agent-announcement-list li > span { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.agent-announcement-list b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.agent-announcement-list small { color: var(--muted-foreground); font-size: 12px; }
+.agent-announcement-list a { flex: 0 0 auto; color: var(--primary); font-size: 12px; font-weight: 650; text-decoration: none; }
 .agent-patch { grid-column: 1 / -1; border-color: color-mix(in oklch, var(--primary), var(--border) 44%) !important; }
 .agent-patch h2, .agent-proposal h2 { margin: 16px 16px 8px; font-size: 17px; line-height: 1.45; }
 .agent-patch-modules { padding: 0 16px 12px; display: flex; flex-wrap: wrap; gap: 6px; }
@@ -2287,7 +2316,7 @@ svg { stroke-width: 1.8; }
 .spin { animation: agent-spin 1s linear infinite; }
 @keyframes agent-spin { to { transform: rotate(360deg); } }
 @media (max-width: 1100px) { .agent-task-grid { grid-template-columns: 1fr; }.agent-plan { grid-row: auto; }.agent-result, .agent-patch, .agent-proposal, .agent-actions { grid-column: 1; } }
-@media (max-width: 900px) { .agent-os { padding: 18px 14px 96px; }.agent-os-header { grid-template-columns: 1fr; align-items: start; }.agent-intent-grid { grid-template-columns: repeat(2,1fr); }.agent-intent-grid article:nth-child(2) { border-right: 0; }.agent-intent-grid article:nth-child(-n+2) { border-bottom: 1px solid var(--border); }.agent-command > footer, .agent-actions { align-items: stretch; flex-direction: column; }.agent-actions > div:last-child { justify-content: flex-start; }.agent-result > article { grid-template-columns: 1fr; gap: 4px; } }
+@media (max-width: 900px) { .agent-os { padding: 18px 14px 96px; }.agent-os-header { grid-template-columns: 1fr; align-items: start; }.agent-intent-grid { grid-template-columns: repeat(2,1fr); }.agent-intent-grid article:nth-child(2) { border-right: 0; }.agent-intent-grid article:nth-child(-n+2) { border-bottom: 1px solid var(--border); }.agent-command > footer, .agent-actions { align-items: stretch; flex-direction: column; }.agent-actions > div:last-child { justify-content: flex-start; }.agent-result > article { grid-template-columns: 1fr; gap: 4px; }.agent-risk-metrics { grid-template-columns: 1fr; }.agent-risk-metrics > div { border-right: 0; border-bottom: 1px solid var(--border); }.agent-risk-metrics > div:last-child { border-bottom: 0; } }
 @media (prefers-reduced-motion: reduce) { .spin { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
 
 /* Goal-first quant research router */
