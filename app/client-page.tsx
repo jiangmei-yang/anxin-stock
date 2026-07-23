@@ -1,13 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
   BarChart3,
   Bookmark,
-  Bot,
   BriefcaseBusiness,
   Check,
   CheckCircle2,
@@ -24,17 +22,11 @@ import {
   FileChartColumn,
   Gauge,
   History,
-  Home as HomeIcon,
-  LayoutDashboard,
-  Layers3,
   LockKeyhole,
   LogOut,
   Plus,
   Search,
-  ScanSearch,
-  ReceiptText,
   ShieldCheck,
-  SlidersHorizontal,
   Sparkles,
   Target,
   TimerReset,
@@ -58,7 +50,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { FinancialHealthPanel } from "./components/financial-health-panel";
-import { BrandMark } from "./components/brand-mark";
+import { AppNavigation } from "./components/app-navigation";
 import type { QuantHypothesis, QuantTestResult, SavedQuantVerification } from "./lib/quant-verification";
 import {PARTICIPANT_SEGMENTS,type ParticipantSegment} from "./lib/user-study-validation";
 
@@ -196,53 +188,8 @@ type SourceCheck = { category: string; source: string; status: "loading" | "live
 type HeaderFreshness = { state: "checking" | "ready" | "partial"; quote: string; evidence: string };
 const LOADING_SOURCE_CHECKS: SourceCheck[] = ["行情", "公告", "财报"].map((category) => ({ category, source: "正在连接", status: "loading", updatedAt: "—", detail: "检查公开数据源" }));
 
-const navItems = [
-  { id: "desk" as const, label: "研究概览", icon: LayoutDashboard },
-  { id: "research" as const, label: "股票研究", icon: FileSearch },
-  { id: "decision" as const, label: "决策验证", icon: ShieldCheck },
-  { id: "portfolio" as const, label: "我的持仓", icon: BriefcaseBusiness },
-  { id: "history" as const, label: "历史记录", icon: History },
-  { id: "rules" as const, label: "我的规则", icon: SlidersHorizontal },
-  { id: "privacy" as const, label: "数据和隐私", icon: LockKeyhole },
-];
-
-const toolNavItems = [
-  { href: "/agent", label: "任务助手", icon: Bot },
-  { href: "/quant", label: "量化研究", icon: ScanSearch },
-  { href: "/etf-tool", label: "ETF 诊断", icon: Layers3 },
-  { href: "/trade-tool", label: "交易复盘", icon: ReceiptText },
-];
-
 function PriceChange({ value }: { value: number }) {
   return <span className={value >= 0 ? "price-up" : "price-down"}>{value >= 0 ? "+" : ""}{value.toFixed(2)}%</span>;
-}
-
-function Brand() {
-  return <Link className="brand" href="/" aria-label="返回安心看股 Market Clarity 工作台"><BrandMark /></Link>;
-}
-
-function AppRail({ view, onView, hasPending }: { view: View; onView: (view: View) => void; hasPending: boolean }) {
-  const groups = [
-    { id: "research", label: "研究", icon: FileSearch, active: ["desk", "research"].includes(view), defaultView: "research" as View, views: navItems.filter((item) => ["desk", "research"].includes(item.id)), links: toolNavItems.filter((item) => ["/quant", "/etf-tool"].includes(item.href)) },
-    { id: "decision", label: "决策", icon: ShieldCheck, active: ["newDecision", "decision", "decisionResult"].includes(view), defaultView: "decision" as View, views: navItems.filter((item) => item.id === "decision"), links: toolNavItems.filter((item) => item.href === "/trade-tool") },
-    { id: "portfolio", label: "组合", icon: BriefcaseBusiness, active: ["portfolio", "history", "rules", "privacy"].includes(view), defaultView: "portfolio" as View, views: navItems.filter((item) => ["portfolio", "history", "rules", "privacy"].includes(item.id)), links: [] },
-    { id: "assistant", label: "助手", icon: Bot, active: false, defaultView: "research" as View, views: [], links: toolNavItems.filter((item) => item.href === "/agent") },
-  ];
-  return (
-    <aside className="app-rail">
-      <Brand />
-      <nav aria-label="主导航">
-        <Link className="rail-button" href="/" aria-label="返回工作台"><HomeIcon /><span>工作台</span></Link>
-        {groups.map((group) => { const GroupIcon = group.icon; return <div className={`rail-group ${group.active ? "active" : ""}`} key={group.id}>
-          <button className={`rail-button ${group.active ? "active" : ""}`} onClick={() => onView(group.defaultView)} aria-label={group.label} aria-current={group.active ? "page" : undefined}><GroupIcon/><span>{group.label}</span>{group.id === "decision" && hasPending && <i>1</i>}</button>
-          <div className="nav-submenu research-submenu" role="menu" aria-label={`${group.label}子菜单`}><header><GroupIcon/><span><strong>{group.label}</strong><small>{group.id === "research" ? "行情、事件与验证" : group.id === "decision" ? "从信息到行动前检查" : group.id === "portfolio" ? "持仓、规则与复核" : "组织复杂研究任务"}</small></span></header>
-            {group.views.map(({ id, label, icon: Icon }) => <button key={id} role="menuitem" className={view === id || (id === "decision" && view === "decisionResult") ? "selected" : ""} onClick={() => onView(id)}><Icon/><span><strong>{label}</strong><small>{id === "desk" ? "市场与关注变化" : id === "research" ? "价格、公告与财务" : id === "decision" ? "金额、理由与退出条件" : id === "portfolio" ? "集中度与行业暴露" : id === "history" ? "复核过去的决定" : id === "rules" ? "个人提醒边界" : "数据保存和服务边界"}</small></span></button>)}
-            {group.links.map(({ href, label, icon: Icon }) => <a key={href} href={href} role="menuitem"><Icon/><span><strong>{label}</strong><small>{href === "/quant" ? "规则、回测与模拟" : href === "/etf-tool" ? "持仓穿透与重复暴露" : href === "/trade-tool" ? "交易归因与行为复盘" : "拆解目标与调用工具"}</small></span></a>)}
-          </div>
-        </div>; })}
-      </nav>
-    </aside>
-  );
 }
 
 function AppHeader({ view, stockCode, freshnessOverride, userName, syncStatus, onNewDecision, onSelectStock, onDataStatus }: { view: View; stockCode: string; freshnessOverride?: { stockCode: string; value: HeaderFreshness }; userName: string; syncStatus: CloudSyncStatus; onNewDecision: () => void; onSelectStock: (stock: Stock) => void; onDataStatus: () => void }) {
@@ -1460,7 +1407,7 @@ export default function Home({ authenticatedUser, initialView = "desk", initialC
       try {
         const requestedView = new URLSearchParams(window.location.search).get("view");
         const requestedCode = new URLSearchParams(window.location.search).get("code");
-        if (["desk", "research", "newDecision", "history", "portfolio", "rules", "privacy"].includes(requestedView ?? "")) setView(requestedView as View);
+        if (["desk", "research", "newDecision", "decision", "decisionResult", "history", "portfolio", "rules", "privacy"].includes(requestedView ?? "")) setView(requestedView as View);
         if (/^\d{6}$/.test(requestedCode ?? "")) setStock(stocks.find((item) => item.code === requestedCode) ?? createCodeStock(requestedCode!));
         return {
           latestDecision: JSON.parse(window.localStorage.getItem(LOCAL_DECISION_KEY) || "null") || undefined,
@@ -1527,6 +1474,14 @@ export default function Home({ authenticatedUser, initialView = "desk", initialC
     }, 700);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [stateHydrated, rules, holdings, watched, decisionRecords, latestDecision, quantVerifications]);
+  useEffect(() => {
+    if (!stateHydrated) return;
+    const query = new URLSearchParams(window.location.search);
+    query.set("view", view);
+    if (["research", "newDecision", "decision", "decisionResult"].includes(view)) query.set("code", stock.code);
+    else query.delete("code");
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}?${query.toString()}`);
+  }, [stateHydrated, view, stock.code]);
   const goDecision = (context?: ResearchDecisionContext) => { setResearchDecisionContext(context); setView("decision"); };
   const showNotice = (message: string) => { setNotice(message); window.setTimeout(() => setNotice(""), 3200); };
   const selectResearchStock = (target: Stock) => { setStock(target); setAction(holdingValueFor(holdings, target.code) > 0 ? "补仓" : "买入"); };
@@ -1565,7 +1520,10 @@ export default function Home({ authenticatedUser, initialView = "desk", initialC
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">跳到主要内容</a>
-      <AppRail view={view} onView={(nextView) => { if (nextView === "decision") { startNewDecision(); return; } if (nextView === "research") setAction(holdingValueFor(holdings, stock.code) > 0 ? "补仓" : "买入"); setView(nextView); }} hasPending={false} />
+      <AppNavigation
+        activePath={view === "portfolio" || view === "history" || view === "rules" || view === "privacy" ? "/portfolio" : view === "newDecision" || view === "decision" || view === "decisionResult" ? "/opportunity" : "/analysis"}
+        activeHref={view === "history" ? "/analysis?view=history" : view === "portfolio" ? "/portfolio" : view === "rules" || view === "privacy" ? "/profile" : view === "newDecision" || view === "decision" || view === "decisionResult" ? "/analysis?view=decision" : "/analysis?view=research"}
+      />
       <div className="app-body">
         <AppHeader view={view} stockCode={statusStockCode} freshnessOverride={freshnessOverride} userName={authenticatedUser} syncStatus={syncStatus} onNewDecision={startNewDecision} onSelectStock={openResearch} onDataStatus={() => setShowDataStatus(true)} />
         {showDataStatus && <DataStatusDrawer stockCode={statusStockCode} open onClose={() => setShowDataStatus(false)} onStatus={syncFreshnessFromDrawer} />}

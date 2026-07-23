@@ -20,7 +20,7 @@ test("server-renders the personal investment workbench", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>安心看股 · Market Clarity<\/title>/i);
+  assert.match(html, /<title>Market Clarity · 安心看股<\/title>/i);
   assert.match(html, /市场概览/);
   assert.match(html, /默认研究：贵州茅台/);
   assert.match(html, /从你现在关心的事情开始/);
@@ -50,9 +50,11 @@ test("keeps onboarding contextual and navigation grouped by user goal", async ()
   assert.match(navigation, /label: "助手"/);
   assert.doesNotMatch(navigation, /href: "\/demo", label: "快速体验"/);
   assert.match(guide, /本页怎么用/);
-  assert.match(guide, /path === "\/analysis"/);
-  assert.match(guide, /path === "\/etf-tool"/);
-  assert.match(guide, /第 \{step \+ 1\} 步/);
+  assert.match(guide, /path=>path==="\/analysis"/);
+  assert.match(guide, /path=>path==="\/etf-tool"/);
+  assert.match(guide, /可操作指引/);
+  assert.match(guide, /anxin:guide:/);
+  assert.match(guide, /已完成 \{done\.length\}/);
   assert.match(workbench, /近 60 个交易日价格与成交量走势图/);
   assert.match(workbench, /60日高点/);
   assert.match(workbench, /最新可核实事件/);
@@ -103,6 +105,8 @@ test("opens the requested stock workbench view and keeps tool navigation explici
   assert.match(analysisPage, /allowedViews/);
   assert.match(analysisPage, /initialView = requestedView/);
   assert.match(clientPage, /useState<View>\(initialView\)/);
+  assert.match(clientPage, /window\.history\.replaceState/);
+  assert.match(clientPage, /activeHref=/);
   assert.match(toolShell, /AppNavigation/);
   assert.match(appNavigation, /\/analysis\?view=research/);
   assert.match(appNavigation, /href: "\/portfolio"/);
@@ -132,9 +136,9 @@ test("server-renders an honest evaluation center and reproducible classroom demo
   assert.match(evaluationHtml, /跨用户证据/);
   assert.match(evaluationHtml, /位匿名参与者/);
   assert.match(evaluationHtml, /打开 90 秒演示/);
-  assert.match(demoHtml, /教学快照/);
-  assert.match(demoHtml, /准备补仓 ¥50,000/);
-  assert.match(demoHtml, /不会执行交易/);
+  assert.match(demoHtml, /可操作教学场景/);
+  assert.match(demoHtml, /你准备补仓多少钱/);
+  assert.match(demoHtml, /规则计算 · 不调用外部模型/);
 });
 
 test("blocks model evaluation when only rule mode is available", async () => {
@@ -426,10 +430,11 @@ test("server-renders native ETF and trade review workspaces", async () => {
 });
 
 test("keeps the daily workflow and decision loop in the product source", async () => {
-  const [page, css, layout, informationRoute, stockSearchRoute, evidenceRoute, marketRoute, etfPage, tradePage, etfWorkspace, tradeWorkspace, etfSearchRoute, etfDiagnosisRoute, etfPublic, tradeAttributionRoute, financialPanel, financialRoute] = await Promise.all([
+  const [page, css, layout, navigation, informationRoute, stockSearchRoute, evidenceRoute, marketRoute, etfPage, tradePage, etfWorkspace, tradeWorkspace, etfSearchRoute, etfDiagnosisRoute, etfPublic, tradeAttributionRoute, financialPanel, financialRoute] = await Promise.all([
     readFile(new URL("../app/client-page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/app-navigation.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/information/[code]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/stocks/search/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/evidence/[code]/route.ts", import.meta.url), "utf8"),
@@ -535,8 +540,8 @@ test("keeps the daily workflow and decision loop in the product source", async (
   assert.match(page, /evidence-title-link/);
   assert.match(page, /核实外部说法/);
   assert.match(page, /本次实时公开资料/);
-  assert.match(page, /ETF 诊断/);
-  assert.match(page, /交易复盘/);
+  assert.match(navigation, /ETF 诊断/);
+  assert.match(navigation, /交易复盘/);
   assert.match(page, /parseReasonStructure/);
   assert.match(page, /确认系统如何理解/);
   assert.match(page, /规则拆解 · 每一项都可以修正/);

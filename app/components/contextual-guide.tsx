@@ -1,91 +1,72 @@
 "use client";
 
 import Link from "next/link";
+import { Check, CircleHelp, ExternalLink, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ArrowLeft, ArrowRight, CircleHelp, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
 
-type GuideStep = { title: string; body: string; target?: string; action?: { label: string; href: string } };
-type Guide = { title: string; summary: string; steps: GuideStep[] };
+type GuideTask = { title:string; body:string; action:string; href:string };
+type Guide = { title:string; summary:string; tasks:GuideTask[] };
 
-const GUIDES: Array<{ match: (path: string) => boolean; guide: Guide }> = [
-  { match: (path) => path === "/", guide: { title: "工作台", summary: "先掌握市场状态，再进入研究或检查。", steps: [
-    { title: "先扫一眼市场", body: "指数和数据时间用于判断今天的市场环境，不代表买卖方向。", target: '[data-guide="market-pulse"]' },
-    { title: "打开默认股票", body: "价格、区间、成交变化和事件会放在同一张图中，点击可进入完整研究。", target: '[data-guide="stock-focus"]' },
-    { title: "从一个动作开始", body: "研究股票、核实消息或检查组合，选最接近你当前问题的一项。", target: '[data-guide="home-actions"]', action: { label: "看 90 秒示例", href: "/demo" } },
-  ] } },
-  { match: (path) => path === "/analysis", guide: { title: "股票研究", summary: "搜索股票后，按价格、事件、财务和决策影响阅读。", steps: [
-    { title: "搜索代码或名称", body: "顶部搜索支持股票名称和 6 位代码，不需要先填写持仓。", target: '[data-guide="page-header"]' },
-    { title: "先看变化，再看原因", body: "价格走势、公告事件与基准表现应结合阅读；时间相邻不代表因果。", target: "#main-content" },
-    { title: "需要行动时再检查", body: "只有准备买入、补仓或卖出时，才进入决策验证填写金额与理由。", action: { label: "打开决策验证", href: "/analysis?view=decision" } },
-  ] } },
-  { match: (path) => path === "/opportunity", guide: { title: "机会检查", summary: "把一条说法拆成事实、推断和待核实来源。", steps: [
-    { title: "粘贴你看到的内容", body: "可以是文字、链接或截图摘要；系统不会把讨论热度当成投资价值。", target: "#main-content" },
-    { title: "补充最少背景", body: "只需说明涉及标的、来源和你为什么在意，其余可以选择“不确定”。" },
-    { title: "先看结论与缺口", body: "结果会优先说明这条信息能否影响决定，以及还缺少哪些原始证据。" },
-  ] } },
-  { match: (path) => path === "/portfolio", guide: { title: "我的组合", summary: "用模拟或手工持仓查看集中度和重复暴露。", steps: [
-    { title: "先录入最少信息", body: "股票代码和金额已经足够；不需要券商账号、成本价或密码。", target: "#main-content" },
-    { title: "查看资金集中在哪里", body: "先看单一资产和行业占比，再看它们是否超过你的个人边界。" },
-    { title: "从风险进入研究", body: "点击具体持仓可继续查看行情、公告和与当前组合的关系。" },
-  ] } },
-  { match: (path) => path === "/etf-tool", guide: { title: "ETF 诊断", summary: "ETF 名称不同，底层持仓仍可能高度重复。", steps: [
-    { title: "添加 ETF", body: "搜索代码或名称，先加入一至三只你真实关注的 ETF。", target: "#tool-main" },
-    { title: "检查底层重合", body: "重点看共同重仓股、行业集中度和披露日期，而不是只看基金名称。" },
-    { title: "保存为观察", body: "诊断结果只用于研究和组合检查，不会直接生成调仓指令。" },
-  ] } },
-  { match: (path) => path === "/quant", guide: { title: "量化研究", summary: "描述想法，确认规则，再用历史数据检验。", steps: [
-    { title: "用一句话描述", body: "例如：每周检查低波动 ETF，先模拟。无需选择底层量化框架。", target: "#tool-main" },
-    { title: "确认机器理解", body: "检查标的、频率、条件和成本假设；模糊条件会要求确认。" },
-    { title: "看稳定性而非单一收益", body: "重点比较最大回撤、样本外结果、换手率和数据质量。" },
-  ] } },
-  { match: (path) => path === "/trade-tool", guide: { title: "交易复盘", summary: "导入记录后，区分标的、择时、仓位和费用影响。", steps: [
-    { title: "导入交易记录", body: "支持 CSV 上传或粘贴；页面提供字段示例。", target: "#tool-main" },
-    { title: "先读事实归因", body: "FIFO、手续费和未平仓数量由规则计算，不交给模型猜测。" },
-    { title: "再看行为模式", body: "复盘关注追高、频繁交易和集中度，不输出必须买卖的结论。" },
-  ] } },
-  { match: (path) => path === "/agent", guide: { title: "任务助手", summary: "说目标即可，系统会拆解任务和需要确认的修改。", steps: [
-    { title: "描述你想完成什么", body: "可以说“研究我的 ETF 重复暴露”，不需要知道工具名称。", target: "#tool-main" },
-    { title: "查看执行计划", body: "数据查询可以直接运行；修改工作台、规则或提醒必须先预览。" },
-    { title: "确认或撤销", body: "所有界面修改都有确认、撤销和恢复默认入口。" },
-  ] } },
-  { match: (path) => path === "/features", guide: { title: "产品说明", summary: "查看真实能力状态，并用能力知识库准备 Pitch。", steps: [
-    { title: "先看产品闭环", body: "这里说明安心看股如何把公开信息、个人持仓和行动前检查连接起来。", target: '[data-guide="capability-overview"]' },
-    { title: "核对交付状态", body: "能力卡直接读取平台注册中心，区分已上线、测试中和当前不可用。", target: '[data-guide="capability-matrix"]' },
-    { title: "向产品知识库提问", body: "输入组员或评委可能问的问题，回答会附能力来源、入口、版本与更新时间。", target: '[data-guide="capability-ask"]' },
-  ] } },
+const GUIDES:Array<{match:(path:string)=>boolean;guide:Guide}>=[
+  {match:path=>path==="/",guide:{title:"工作台快速上手",summary:"完成任意一项，就能看到真实产品内容。",tasks:[
+    {title:"查看一只真实股票",body:"用默认股票理解价格、事件和财务如何放在同一页。",action:"打开贵州茅台",href:"/analysis?view=research&code=600519"},
+    {title:"核实一条外部说法",body:"把新闻或社交内容拆成事实、推断和待核实来源。",action:"开始机会检查",href:"/opportunity"},
+    {title:"体验完整决策闭环",body:"自己修改金额和理由，观察风险数字如何变化。",action:"进入决策沙盒",href:"/demo"},
+  ]}},
+  {match:path=>path==="/analysis",guide:{title:"股票研究怎么用",summary:"不要从所有指标开始；先完成一轮证据阅读。",tasks:[
+    {title:"看价格与事件是否同向",body:"先读走势图上的时间、价格区间和事件标记，时间相邻不代表因果。",action:"载入贵州茅台",href:"/analysis?view=research&code=600519"},
+    {title:"换一只股票验证搜索",body:"确认名称与 6 位代码都能进入真实研究页。",action:"改看招商银行",href:"/analysis?view=research&code=600036"},
+    {title:"把研究带入行动前检查",body:"只有准备行动时才填写金额、理由和退出条件。",action:"进入交易前验证",href:"/analysis?view=decision&code=600519"},
+  ]}},
+  {match:path=>path==="/opportunity",guide:{title:"机会检查怎么用",summary:"用一条你真实看到的消息完成核实。",tasks:[
+    {title:"粘贴原话",body:"保留原始措辞，系统才能识别收益暗示、时间压力和信息缺口。",action:"回到输入区",href:"/opportunity#main-content"},
+    {title:"查看事实与推断",body:"先看有没有可点击来源，再看推断是否超出证据。",action:"查看示例闭环",href:"/demo"},
+    {title:"结合个人资金影响",body:"添加模拟持仓后，检查这条消息是否加重已有暴露。",action:"打开我的组合",href:"/portfolio"},
+  ]}},
+  {match:path=>path==="/portfolio",guide:{title:"组合检查怎么用",summary:"无需连接券商，先用模拟金额看集中度。",tasks:[
+    {title:"加入一笔持仓",body:"股票代码与金额已足够计算最基本的资金暴露。",action:"研究并加入持仓",href:"/analysis?view=research"},
+    {title:"导入交易记录",body:"有 CSV 时可自动还原未平仓数量与手续费。",action:"打开交易复盘",href:"/trade-tool"},
+    {title:"设置自己的提醒边界",body:"仓位上限来自用户确认，不由模型决定。",action:"打开我的规则",href:"/profile"},
+  ]}},
+  {match:path=>path==="/etf-tool",guide:{title:"ETF 诊断怎么用",summary:"至少加入两只 ETF，重复暴露才有比较意义。",tasks:[
+    {title:"加入第一只 ETF",body:"可按名称或代码搜索。",action:"开始搜索",href:"/etf-tool#tool-main"},
+    {title:"加入相近主题 ETF",body:"比较共同重仓股，而不是只看基金名称。",action:"回到诊断区",href:"/etf-tool#tool-main"},
+    {title:"带入组合检查",body:"诊断结束后再看重复暴露对个人组合的影响。",action:"打开我的组合",href:"/portfolio"},
+  ]}},
+  {match:path=>path==="/quant",guide:{title:"量化研究怎么用",summary:"从一句可检验的低频规则开始。",tasks:[
+    {title:"描述研究目标",body:"例如：每周检查低波动 ETF，先模拟。",action:"打开策略输入",href:"/quant#tool-main"},
+    {title:"确认规则与成本",body:"检查标的、频率、手续费、滑点和数据区间。",action:"回到策略预览",href:"/quant#tool-main"},
+    {title:"比较稳定性",body:"重点看回撤、样本外结果和换手率，不只看累计收益。",action:"查看产品边界",href:"/features"},
+  ]}},
+  {match:path=>path==="/trade-tool",guide:{title:"交易复盘怎么用",summary:"导入记录后先读计算事实，再读行为解释。",tasks:[
+    {title:"导入示例 CSV",body:"页面给出字段格式，数据只用于当前用户的复盘。",action:"打开导入区",href:"/trade-tool#tool-main"},
+    {title:"核对 FIFO 与费用",body:"盈亏、未平仓数量和手续费来自确定性计算。",action:"查看复盘区",href:"/trade-tool#tool-main"},
+    {title:"把发现变成下次检查项",body:"复盘不输出买卖指令，只形成下一次行动前问题。",action:"进入交易前验证",href:"/analysis?view=decision"},
+  ]}},
+  {match:path=>path==="/agent",guide:{title:"任务助手怎么用",summary:"给出目标；系统负责组织工具，但修改必须确认。",tasks:[
+    {title:"描述结果而不是工具",body:"例如：找出我的 ETF 重复暴露并放到工作台。",action:"打开任务输入",href:"/agent#tool-main"},
+    {title:"核对执行计划",body:"确认数据来源、工具步骤和哪些操作需要批准。",action:"查看可用能力",href:"/features"},
+    {title:"应用或撤销工作台修改",body:"界面变化始终先预览，并保留历史版本。",action:"编辑工作台",href:"/workspace"},
+  ]}},
+  {match:path=>path==="/features",guide:{title:"产品说明怎么用",summary:"给组员和评委核对真实交付状态。",tasks:[
+    {title:"先看产品闭环",body:"理解信息层与决策层如何连接。",action:"查看核心闭环",href:"/features#capability-flow"},
+    {title:"核对当前交付",body:"区分已上线、测试中与当前不可用。",action:"查看能力清单",href:"/features#capability-matrix"},
+    {title:"模拟评委追问",body:"答案会附能力来源、入口、版本和更新时间。",action:"向知识库提问",href:"/features#capability-ask"},
+  ]}},
 ];
 
-const DEFAULT_GUIDE: Guide = { title: "本页指引", summary: "先确认页面用途，再完成一个最小任务。", steps: [
-  { title: "确认当前页面", body: "页面顶部说明当前工具处理什么，以及数据是否可用。", target: '[data-guide="page-header"]' },
-  { title: "完成一个最小输入", body: "只填写完成当前任务必须的信息，其余内容可稍后补充。", target: "main" },
-  { title: "查看来源与下一步", body: "金融结论应同时显示数据来源、时间和仍然缺失的信息。" },
-] };
+const FALLBACK:Guide={title:"本页快速上手",summary:"先完成一个最小任务，再决定是否深入。",tasks:[
+  {title:"确认页面用途",body:"页面顶部说明当前工具处理什么和数据状态。",action:"查看页面顶部",href:"#tool-main"},
+  {title:"完成最少输入",body:"只填写当前任务必要的信息。",action:"进入主要内容",href:"#tool-main"},
+  {title:"核对来源和下一步",body:"结论应同时显示数据时间与仍然缺失的信息。",action:"查看产品能力",href:"/features"},
+]};
 
-export function ContextualGuide() {
-  const pathname = usePathname();
-  const guide = useMemo(() => GUIDES.find((item) => item.match(pathname))?.guide ?? DEFAULT_GUIDE, [pathname]);
-  const [open, setOpen] = useState(false);
-  const [step, setStep] = useState(0);
-
-  useEffect(() => {
-    document.querySelectorAll(".guide-highlight").forEach((node) => node.classList.remove("guide-highlight"));
-    if (!open) return;
-    const target = guide.steps[step]?.target ? document.querySelector(guide.steps[step].target!) : null;
-    if (target) { target.classList.add("guide-highlight"); target.scrollIntoView({ behavior: "smooth", block: "center" }); }
-    return () => target?.classList.remove("guide-highlight");
-  }, [guide, open, step]);
-
-  const current = guide.steps[step];
-  return <>
-    <button className="context-guide-trigger" onClick={() => setOpen(true)} aria-label={`打开${guide.title}新手指引`}><CircleHelp /><span>本页怎么用</span></button>
-    {open && <div className="context-guide-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setOpen(false); }}>
-      <aside className="context-guide-panel" role="dialog" aria-modal="true" aria-labelledby="context-guide-title">
-        <header><div><span>{guide.title}</span><h2 id="context-guide-title">{guide.summary}</h2></div><button onClick={() => setOpen(false)} aria-label="关闭指引"><X /></button></header>
-        <div className="context-guide-progress" aria-label={`第 ${step + 1} 步，共 ${guide.steps.length} 步`}>{guide.steps.map((item, index) => <button key={item.title} className={index === step ? "active" : index < step ? "done" : ""} onClick={() => setStep(index)} aria-label={`第 ${index + 1} 步：${item.title}`} />)}</div>
-        <section><span>第 {step + 1} 步</span><h3>{current.title}</h3><p>{current.body}</p>{current.action && <Link href={current.action.href} onClick={() => setOpen(false)}>{current.action.label}<ArrowRight /></Link>}</section>
-        <footer><button onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}><ArrowLeft />上一步</button>{step < guide.steps.length - 1 ? <button className="primary" onClick={() => setStep(step + 1)}>下一步<ArrowRight /></button> : <button className="primary" onClick={() => setOpen(false)}>知道了</button>}</footer>
-      </aside>
-    </div>}
-  </>;
+export function ContextualGuide(){
+  const pathname=usePathname();const guide=useMemo(()=>GUIDES.find(item=>item.match(pathname))?.guide??FALLBACK,[pathname]);const storageKey=`anxin:guide:${pathname}`;
+  const[open,setOpen]=useState(false);const[progress,setProgress]=useState<Record<string,number[]>>({});const done=progress[storageKey]??[];
+  const save=(next:number[])=>{setProgress(current=>({...current,[storageKey]:next}));window.localStorage.setItem(storageKey,JSON.stringify(next));};
+  const toggle=(index:number)=>save(done.includes(index)?done.filter(item=>item!==index):[...done,index]);
+  const show=()=>{let stored:number[]=[];try{stored=JSON.parse(window.localStorage.getItem(storageKey)??"[]")}catch{stored=[]}setProgress(current=>({...current,[storageKey]:stored}));setOpen(true);};
+  return <><button className="context-guide-trigger" onClick={show} aria-label={`打开${guide.title}`}><CircleHelp/><span>本页怎么用</span>{done.length>0&&<i>{done.length}/3</i>}</button>{open&&<div className="context-guide-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target)setOpen(false)}}><aside className="context-guide-panel" role="dialog" aria-modal="true" aria-labelledby="context-guide-title"><header><div><span>可操作指引</span><h2 id="context-guide-title">{guide.title}</h2><p>{guide.summary}</p></div><button onClick={()=>setOpen(false)} aria-label="关闭指引"><X/></button></header><div className="guide-task-list">{guide.tasks.map((task,index)=><article className={done.includes(index)?"done":""} key={task.title}><button className="guide-task-check" onClick={()=>toggle(index)} aria-label={done.includes(index)?`取消完成${task.title}`:`标记完成${task.title}`}><Check/></button><div><strong>{task.title}</strong><p>{task.body}</p><Link href={task.href} onClick={()=>{if(!done.includes(index))save([...done,index]);setOpen(false)}}>{task.action}<ExternalLink/></Link></div></article>)}</div><footer><span>已完成 {done.length} / {guide.tasks.length}</span><button onClick={()=>{save([]);window.localStorage.removeItem(storageKey)}}>重置进度</button></footer></aside></div>}</>;
 }

@@ -9,19 +9,20 @@ import "./capability-guide.css";
 import "./quant-workspace.css";
 import "./failure-control.css";
 import "./product-polish.css";
+import "./demo-sandbox.css";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") || requestHeaders.get("host") || "anxin-decision-desk.gljiangmei.chatgpt.site";
   const protocol = requestHeaders.get("x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
   const image = `${protocol}://${host}/og-workbench-v2.png`;
-  const title = "安心看股 · Market Clarity";
-  const description = "定义个人规则，核对社交内容、组合暴露与交易前风险。";
+  const title = "Market Clarity · 安心看股";
+  const description = "A personal investment research and pre-decision review workspace. 研究公开信息、组合暴露与行动前风险。";
   return {
     title,
     description,
     icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
-    openGraph: { title, description, images: [{ url: image, width: 1536, height: 1024, alt: "安心看股个人投资工作台" }] },
+    openGraph: { title, description, images: [{ url: image, width: 1536, height: 1024, alt: "Market Clarity personal investment workspace" }] },
     twitter: { card: "summary_large_image", title, description, images: [image] },
   };
 }

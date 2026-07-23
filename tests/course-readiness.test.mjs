@@ -27,12 +27,14 @@ test("keeps behavior evidence in evaluation surfaces instead of the product home
 
 test("opens stock research on the evidence summary instead of an empty chart", () => {
   const research = read("app/client-page.tsx");
+  const navigation = read("app/components/app-navigation.tsx");
   assert.match(research, /useState<"概览" \| "财报体检"[\s\S]*?>\("概览"\)/);
   assert.match(research, /setPanel\("概览"\)/);
   assert.match(research, /submittedQuery\.trim\(\) \|\| "检查近期正式披露"/);
-  assert.match(research, /aria-label="返回安心看股 Market Clarity 工作台"/);
-  assert.match(research, /label: "研究概览"/);
-  assert.match(research, /href: "\/quant", label: "量化研究"/);
+  assert.match(research, /<AppNavigation/);
+  assert.match(navigation, /aria-label="Market Clarity 安心看股工作台"/);
+  assert.match(navigation, /href: "\/analysis\?view=research", label: "股票研究"/);
+  assert.match(navigation, /href: "\/quant", label: "量化研究"/);
 });
 
 test("does not wait for an unconfigured local evidence backend", () => {
@@ -83,10 +85,11 @@ test("runs a transparent 20-case rules baseline and keeps model evidence separat
 test("provides a clearly labelled 90-second teaching walkthrough",()=>{
   const demo=read("app/components/demo-walkthrough.tsx");
   const page=read("app/demo/page.tsx");
-  assert.match(demo,/教学快照/);
-  assert.match(demo,/不代表当前行情/);
+  assert.match(demo,/可操作教学场景/);
+  assert.match(demo,/type="number"/);
+  assert.match(demo,/demo-reason-options/);
   assert.match(demo,/不连接券商/);
-  assert.match(demo,/计划后单股占比 35%/);
+  assert.match(demo,/afterWeight/);
   assert.match(page,/90 秒课堂演示/);
 });
 
