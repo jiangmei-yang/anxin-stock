@@ -57,8 +57,8 @@ test("keeps onboarding contextual and navigation grouped by user goal", async ()
   assert.match(guide, /pick\(isEnglish,"已完成","Completed"\)/);
   assert.match(navigation, /locale-switcher/);
   assert.match(navigation, /setLocale\("en"\)/);
-  assert.match(workbench, /近 60 个交易日价格、均线、成交量与事件走势图/);
-  assert.match(workbench, /60日高点/);
+  assert.match(workbench, /近 \$\{rangeDays\} 个交易日价格、均线、成交量与事件走势图/);
+  assert.match(workbench, /\$\{rangeDays\}日高点/);
   assert.match(workbench, /最新正式信息/);
   assert.match(css, /\.nav-submenu/);
   assert.match(css, /\.context-guide-panel/);
@@ -69,6 +69,10 @@ test("keeps onboarding contextual and navigation grouped by user goal", async ()
   assert.match(workbench, /成交活跃度/);
   assert.match(workbench, /chart-moving-average ma5/);
   assert.match(workbench, /今日需要核对/);
+  assert.match(workbench, /setRangeDays/);
+  assert.match(workbench, /home-chart-tooltip/);
+  assert.match(workbench, /moveHoverByKey/);
+  assert.match(workbench, /Maximize2/);
   assert.match(workbench, /published_at/);
   assert.match(workbench, /Shanghai Composite/);
   assert.doesNotMatch(workbench, /怎么看这张图/);
