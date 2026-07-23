@@ -76,3 +76,18 @@ test("keeps the behavioral price offer usable in English",()=>{
   assert.match(offer,/Join the 14-day paid test/);
   assert.match(offer,/A waitlist is not a subscription/);
 });
+
+test("keeps the core stock research and evidence path usable in English",()=>{
+  const page=read("app/client-page.tsx");
+  assert.match(page,/Research a specific question/);
+  assert.match(page,/Prices & events/);
+  assert.match(page,/Key metrics for this range/);
+  assert.match(page,/Candles/);
+  assert.match(page,/Open \/ High/);
+  assert.match(page,/Event and price comparison/);
+  assert.match(page,/How evidence affects the thesis/);
+  assert.match(page,/Current source status/);
+  assert.match(page,/What are you considering\?/);
+  assert.match(page,/Position and downside scenarios are calculated next/);
+  assert.match(page,/Data and sources/);
+});

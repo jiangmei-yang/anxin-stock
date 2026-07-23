@@ -53,6 +53,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { FinancialHealthPanel } from "./components/financial-health-panel";
 import { AppNavigation } from "./components/app-navigation";
+import { pick, useI18n } from "./i18n";
 import type { QuantHypothesis, QuantTestResult, SavedQuantVerification } from "./lib/quant-verification";
 import {PARTICIPANT_SEGMENTS,type ParticipantRelation,type ParticipantSegment} from "./lib/user-study-validation";
 
@@ -195,7 +196,8 @@ function PriceChange({ value }: { value: number }) {
 }
 
 function AppHeader({ view, stockCode, freshnessOverride, userName, syncStatus, onNewDecision, onSelectStock, onDataStatus }: { view: View; stockCode: string; freshnessOverride?: { stockCode: string; value: HeaderFreshness }; userName: string; syncStatus: CloudSyncStatus; onNewDecision: () => void; onSelectStock: (stock: Stock) => void; onDataStatus: () => void }) {
-  const titles: Record<View, string> = { desk: "研究概览", research: "股票研究", newDecision: "新建决策", decision: "决策验证", decisionResult: "审查记录", history: "历史记录", portfolio: "我的持仓", rules: "我的规则", privacy: "数据和隐私" };
+  const { isEnglish } = useI18n();
+  const titles: Record<View, [string, string]> = { desk: ["研究概览", "Research overview"], research: ["股票研究", "Stock research"], newDecision: ["新建决策", "New review"], decision: ["决策验证", "Decision review"], decisionResult: ["审查记录", "Review record"], history: ["历史记录", "Review history"], portfolio: ["我的持仓", "My portfolio"], rules: ["我的规则", "My rules"], privacy: ["数据和隐私", "Data & privacy"] };
   const [query, setQuery] = useState("");
   const [remoteMatches, setRemoteMatches] = useState<StockSearchItem[]>([]);
   const [searching, setSearching] = useState(false);
@@ -203,12 +205,12 @@ function AppHeader({ view, stockCode, freshnessOverride, userName, syncStatus, o
   const [validatedQuery, setValidatedQuery] = useState("");
   const [failedQuery, setFailedQuery] = useState("");
   const [marketSession] = useState(() => currentAshareSession());
-  const [freshness, setFreshness] = useState<HeaderFreshness>({ state: "checking", quote: "行情检查中", evidence: "公告检查中" });
+  const [freshness, setFreshness] = useState<HeaderFreshness>({ state: "checking", quote: pick(isEnglish, "行情检查中", "Checking market data"), evidence: pick(isEnglish, "公告检查中", "Checking filings") });
   useEffect(() => {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => {
       controller.abort();
-      setFreshness({ state: "partial", quote: "数据检查超时", evidence: "打开来源状态可重新检查" });
+      setFreshness({ state: "partial", quote: pick(isEnglish, "数据检查超时", "Data check timed out"), evidence: pick(isEnglish, "打开来源状态可重新检查", "Open source status to retry") });
     }, 15000);
     Promise.allSettled([
       fetch(`/api/information/${stockCode}`, { signal: controller.signal, cache: "no-store" }).then(async (response) => ({ ok: response.ok, body: await response.json() as InformationSnapshot })),
@@ -223,12 +225,12 @@ function AppHeader({ view, stockCode, freshnessOverride, userName, syncStatus, o
       const evidenceReady = Boolean(evidence?.ok && evidenceCount > 0);
       setFreshness({
         state: quoteReady && evidenceReady ? "ready" : "partial",
-        quote: quoteReady ? `行情 ${formatSourceTimestamp(quote?.body.quote?.update_time || quote?.body.fetchedAt)}` : "行情暂不可用",
-        evidence: evidenceReady ? `公告 ${formatSourceTimestamp(evidence?.body.feed?.updated_at)} · ${evidenceCount} 条` : evidence?.ok ? "公告暂未返回资料" : "公告暂不可用",
+        quote: quoteReady ? `${pick(isEnglish, "行情", "Market")} ${formatSourceTimestamp(quote?.body.quote?.update_time || quote?.body.fetchedAt)}` : pick(isEnglish, "行情暂不可用", "Market data unavailable"),
+        evidence: evidenceReady ? `${pick(isEnglish, "公告", "Filings")} ${formatSourceTimestamp(evidence?.body.feed?.updated_at)} · ${evidenceCount}` : evidence?.ok ? pick(isEnglish, "公告暂未返回资料", "No filings returned") : pick(isEnglish, "公告暂不可用", "Filings unavailable"),
       });
     });
     return () => { window.clearTimeout(timeout); controller.abort(); };
-  }, [stockCode]);
+  }, [stockCode, isEnglish]);
   const visibleFreshness = freshnessOverride?.stockCode === stockCode ? freshnessOverride.value : freshness;
   const localMatches = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -268,27 +270,29 @@ function AppHeader({ view, stockCode, freshnessOverride, userName, syncStatus, o
   const submitSearch = () => {
     if (matches[0]) { onSelectStock(matches[0]); setQuery(""); }
     else if (/^\d{6}$/.test(query.trim()) && failedQuery === query.trim()) { onSelectStock(createCodeStock(query.trim())); setQuery(""); }
-    else if (query.trim() && !searching) setSearchMessage(validatedQuery === query.trim() ? `最近的 A 股证券名单中没有代码 ${query.trim()}` : "正在确认证券代码，请稍候");
+    else if (query.trim() && !searching) setSearchMessage(validatedQuery === query.trim() ? pick(isEnglish, `最近的 A 股证券名单中没有代码 ${query.trim()}`, `Code ${query.trim()} was not found in the current A-share list`) : pick(isEnglish, "正在确认证券代码，请稍候", "Verifying the security code"));
   };
+  const sessionLabel = isEnglish ? (marketSession.includes("收盘") ? "Market closed" : marketSession.includes("交易") ? "Market open" : "A-share session") : marketSession;
   return (
     <header className="app-header">
-      <div className="header-title"><strong>{titles[view]}</strong><span>{view === "research" ? "实时行情以页内更新时间为准" : syncStatus === "synced" ? "个人数据已加密标识并同步" : syncStatus === "saving" ? "正在同步个人数据" : syncStatus === "loading" ? "正在读取个人数据" : "云端暂不可用 · 已保存在本设备"}</span></div>
+      <div className="header-title"><strong>{pick(isEnglish, titles[view][0], titles[view][1])}</strong><span>{view === "research" ? pick(isEnglish, "实时行情以页内更新时间为准", "Use the timestamp shown with each data source") : syncStatus === "synced" ? pick(isEnglish, "个人数据已加密标识并同步", "Personal data synced under an encrypted identity") : syncStatus === "saving" ? pick(isEnglish, "正在同步个人数据", "Syncing personal data") : syncStatus === "loading" ? pick(isEnglish, "正在读取个人数据", "Loading personal data") : pick(isEnglish, "云端暂不可用 · 已保存在本设备", "Cloud unavailable · saved on this device")}</span></div>
       <form className="global-search" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}>
         <Search />
-        <input value={query} onChange={(event) => { setQuery(event.target.value); setRemoteMatches([]); setSearching(false); setSearchMessage(""); }} placeholder="搜索股票、代码或行业" aria-label="搜索股票" autoComplete="off" />
+        <input value={query} onChange={(event) => { setQuery(event.target.value); setRemoteMatches([]); setSearching(false); setSearchMessage(""); }} placeholder={pick(isEnglish, "搜索股票、代码或行业", "Search company, code or sector")} aria-label={pick(isEnglish, "搜索股票", "Search stocks")} autoComplete="off" />
         <kbd>⌘ K</kbd>
-        {query && <div className="search-results" role="listbox" aria-label="股票搜索结果">{matches.length > 0 ? matches.map((stock) => <button type="button" role="option" aria-selected="false" key={stock.code} onClick={() => { onSelectStock(stock); setQuery(""); setSearchMessage(""); }}><span><b>{stock.name}</b><small>{stock.code}.{stock.market} · {stock.industry}</small></span><span>{stock.price > 0 ? <><b>{stock.price.toFixed(2)}</b><PriceChange value={stock.change} /></> : <small>载入真实资料</small>}</span></button>) : searching ? <div className="search-empty"><strong>正在搜索 A 股列表…</strong><span>支持股票简称和 6 位代码</span></div> : /^\d{6}$/.test(query.trim()) && failedQuery === query.trim() ? <button type="button" role="option" aria-selected="false" onClick={() => { onSelectStock(createCodeStock(query.trim())); setQuery(""); setSearchMessage(""); }}><span><b>代码名单暂不可用</b><small>仍可尝试从真实行情服务查询 {query.trim()}</small></span><ArrowRight /></button> : <div className="search-empty"><strong>{searchMessage || (validatedQuery === query.trim() ? `没有在 A 股证券名单中找到 ${query.trim()}` : "没有匹配结果")}</strong><span>{validatedQuery === query.trim() ? "请检查代码；不会用指数或样例行情替代" : "可尝试输入 6 位 A 股代码"}</span></div>}</div>}
+        {query && <div className="search-results" role="listbox" aria-label={pick(isEnglish, "股票搜索结果", "Stock search results")}>{matches.length > 0 ? matches.map((stock) => <button type="button" role="option" aria-selected="false" key={stock.code} onClick={() => { onSelectStock(stock); setQuery(""); setSearchMessage(""); }}><span><b>{stock.name}</b><small>{stock.code}.{stock.market} · {stock.industry}</small></span><span>{stock.price > 0 ? <><b>{stock.price.toFixed(2)}</b><PriceChange value={stock.change} /></> : <small>{pick(isEnglish, "载入真实资料", "Load live sources")}</small>}</span></button>) : searching ? <div className="search-empty"><strong>{pick(isEnglish, "正在搜索 A 股列表…", "Searching the A-share list…")}</strong><span>{pick(isEnglish, "支持股票简称和 6 位代码", "Company names and six-digit codes supported")}</span></div> : /^\d{6}$/.test(query.trim()) && failedQuery === query.trim() ? <button type="button" role="option" aria-selected="false" onClick={() => { onSelectStock(createCodeStock(query.trim())); setQuery(""); setSearchMessage(""); }}><span><b>{pick(isEnglish, "代码名单暂不可用", "Security list unavailable")}</b><small>{pick(isEnglish, `仍可尝试从真实行情服务查询 ${query.trim()}`, `Try code ${query.trim()} against the live market source`)}</small></span><ArrowRight /></button> : <div className="search-empty"><strong>{searchMessage || (validatedQuery === query.trim() ? pick(isEnglish, `没有在 A 股证券名单中找到 ${query.trim()}`, `${query.trim()} was not found in the A-share list`) : pick(isEnglish, "没有匹配结果", "No matching result"))}</strong><span>{validatedQuery === query.trim() ? pick(isEnglish, "请检查代码；不会用指数或样例行情替代", "Check the code; sample quotes will not be substituted") : pick(isEnglish, "可尝试输入 6 位 A 股代码", "Try a six-digit A-share code")}</span></div>}</div>}
       </form>
       <div className="header-actions">
-        <button className={`header-freshness ${visibleFreshness.state}`} onClick={onDataStatus} aria-label="查看数据与来源状态"><i /><span><b>{marketSession} · {visibleFreshness.quote}</b><small>{visibleFreshness.evidence}</small></span><ChevronRight /></button>
-        <a className="header-account" href="/signout-with-chatgpt?return_to=%2F" title={`${userName} · 退出登录`}><span>{userName.slice(0, 1).toUpperCase()}</span><b>{userName}</b><LogOut /></a>
-        <Button size="lg" onClick={onNewDecision}><Plus data-icon="inline-start" />新建决策</Button>
+        <button className={`header-freshness ${visibleFreshness.state}`} onClick={onDataStatus} aria-label={pick(isEnglish, "查看数据与来源状态", "View data and source status")}><i /><span><b>{sessionLabel} · {visibleFreshness.quote}</b><small>{visibleFreshness.evidence}</small></span><ChevronRight /></button>
+        <a className="header-account" href="/signout-with-chatgpt?return_to=%2F" title={`${userName} · ${pick(isEnglish, "退出登录", "Sign out")}`}><span>{userName.slice(0, 1).toUpperCase()}</span><b>{userName}</b><LogOut /></a>
+        <Button size="lg" onClick={onNewDecision}><Plus data-icon="inline-start" />{pick(isEnglish, "新建决策", "New review")}</Button>
       </div>
     </header>
   );
 }
 
 function DataStatusDrawer({ stockCode, open, onClose, onStatus }: { stockCode: string; open: boolean; onClose: () => void; onStatus?: (rows: SourceCheck[]) => void }) {
+  const { isEnglish } = useI18n();
   const [rows, setRows] = useState<SourceCheck[]>(LOADING_SOURCE_CHECKS);
   useEffect(() => {
     if (!open) return;
@@ -332,11 +336,11 @@ function DataStatusDrawer({ stockCode, open, onClose, onStatus }: { stockCode: s
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [open, onClose]);
   if (!open) return null;
-  const statusLabel: Record<SourceCheck["status"], string> = { loading: "检查中", live: "已取得", partial: "部分可用", unavailable: "不可用" };
-  return <div className="data-drawer-layer"><button className="data-drawer-backdrop" aria-label="关闭数据状态" onClick={onClose} /><aside className="data-status-drawer" role="dialog" aria-modal="true" aria-label="数据与来源状态">
-    <header><div><span>当前股票 {stockCode}</span><h2>数据与来源</h2><p>打开面板时现场检查，不用缓存状态冒充实时。</p></div><Button variant="ghost" size="icon" aria-label="关闭数据状态" onClick={onClose}><X /></Button></header>
+  const statusLabel: Record<SourceCheck["status"], string> = { loading: pick(isEnglish, "检查中", "Checking"), live: pick(isEnglish, "已取得", "Available"), partial: pick(isEnglish, "部分可用", "Partial"), unavailable: pick(isEnglish, "不可用", "Unavailable") };
+  return <div className="data-drawer-layer"><button className="data-drawer-backdrop" aria-label={pick(isEnglish, "关闭数据状态", "Close data status")} onClick={onClose} /><aside className="data-status-drawer" role="dialog" aria-modal="true" aria-label={pick(isEnglish, "数据与来源状态", "Data and source status")}>
+    <header><div><span>{pick(isEnglish, `当前股票 ${stockCode}`, `Current security ${stockCode}`)}</span><h2>{pick(isEnglish, "数据与来源", "Data and sources")}</h2><p>{pick(isEnglish, "打开面板时现场检查，不用缓存状态冒充实时。", "Sources are checked when this panel opens; cached status is not presented as live.")}</p></div><Button variant="ghost" size="icon" aria-label={pick(isEnglish, "关闭数据状态", "Close data status")} onClick={onClose}><X /></Button></header>
     <div className="source-status-list">{rows.map((row) => <article key={row.category}><span className={`source-status-dot ${row.status}`} /><div><span>{row.category}</span><strong>{row.source}</strong><p>{row.detail}</p></div><div><Badge variant="outline">{statusLabel[row.status]}</Badge><time>{row.updatedAt}</time></div></article>)}</div>
-    <footer><Database /><span>来源失败时对应功能会显示部分可用或不可用，不使用隐藏演示数据补齐。</span></footer>
+    <footer><Database /><span>{pick(isEnglish, "来源失败时对应功能会显示部分可用或不可用，不使用隐藏演示数据补齐。", "When a source fails, affected features show partial or unavailable status; hidden demo data is not substituted.")}</span></footer>
   </aside></div>;
 }
 
@@ -345,22 +349,23 @@ function SectionHeader({ title, meta, action }: { title: string; meta?: string; 
 }
 
 function EvidenceList({ stockCode, compact = false, liveEvidence }: { stockCode: string; compact?: boolean; liveEvidence?: LiveEvidencePayload }) {
+  const { isEnglish } = useI18n();
   const liveItems: EvidenceItem[] = liveEvidence?.feed?.items?.map((item) => ({
     date: item.published_at.replace("T", " ").slice(0, 16),
-    type: item.category,
+    type: pick(isEnglish, item.category, item.category === "正式披露" || item.category === "公司公告" ? "Official filing" : item.category === "媒体报道" ? "Media report" : item.category),
     title: item.title,
-    status: item.category === "正式披露" ? "已核实来源" : item.category === "媒体报道" ? "需交叉确认" : "观点",
-    impact: item.category === "正式披露" ? "优先读原文" : item.category === "媒体报道" ? "交叉确认" : "仅作观点",
+    status: item.category === "正式披露" ? pick(isEnglish, "已核实来源", "Source verified") : item.category === "媒体报道" ? pick(isEnglish, "需交叉确认", "Cross-check needed") : pick(isEnglish, "观点", "Context only"),
+    impact: item.category === "正式披露" ? pick(isEnglish, "优先读原文", "Read the original first") : item.category === "媒体报道" ? pick(isEnglish, "交叉确认", "Cross-check") : pick(isEnglish, "仅作观点", "Context only"),
     detail: item.summary || item.relation,
     source: item.corroborating_sources && item.corroborating_sources.length > 1 ? `${item.source} 等 ${item.corroborating_sources.length} 个来源` : item.source,
     url: item.url,
   })) ?? [];
   const evidence = liveItems;
   const [expanded, setExpanded] = useState<number | null>(compact ? null : 0);
-  const exchange = stockCode.startsWith("0") ? "深圳证券交易所" : "上海证券交易所";
-  const originFor = (item: EvidenceItem) => item.source ? item.source : item.type.includes("公告") || item.type.includes("披露") ? `${exchange}披露入口 · 当前未连接单条原文` : item.type.includes("行情") || item.type.includes("数据") ? "固定样例行情 · 非实时数据" : "演示外部线索 · 未连接原帖";
-  if (!evidence.length) return <div className={compact ? "evidence-list compact" : "evidence-list"}><article className="evidence-empty"><FileSearch /><div><strong>尚未取得可核实来源</strong><p>请先发起公开资料核实；系统不会用样例公告填充真实证据链。</p></div></article></div>;
-  return <div className={compact ? "evidence-list compact" : "evidence-list"}>{evidence.map((item, index) => { const isExpanded = expanded === index; return <article key={`${item.title}-${index}`} className={isExpanded ? "evidence-row expanded" : "evidence-row"}><div className="evidence-marker"><span>{index + 1}</span><i /></div><div className="evidence-content"><div><time>{item.date}</time><span className="evidence-labels"><Badge variant={item.status.includes("待核实") || item.status.includes("交叉") ? "outline" : "secondary"}>{item.type} · {item.status}</Badge>{!compact && <em>{item.impact}</em>}</span></div>{item.url ? <a className="evidence-title-link" href={item.url} target="_blank" rel="noreferrer"><strong>{item.title}</strong><ExternalLink /></a> : <strong>{item.title}</strong>}{isExpanded && <><p>{item.detail}</p><span className="evidence-origin"><Database />{originFor(item)}</span></>}</div><Button variant="ghost" size="icon-sm" aria-expanded={isExpanded} aria-label={`${isExpanded ? "收起" : "展开"} ${item.title}`} onClick={() => setExpanded(isExpanded ? null : index)}>{isExpanded ? <ChevronDown /> : <ChevronRight />}</Button></article>; })}</div>;
+  const exchange = stockCode.startsWith("0") ? pick(isEnglish, "深圳证券交易所", "Shenzhen Stock Exchange") : pick(isEnglish, "上海证券交易所", "Shanghai Stock Exchange");
+  const originFor = (item: EvidenceItem) => item.source ? item.source : item.type.includes("公告") || item.type.includes("披露") || item.type.includes("filing") ? pick(isEnglish, `${exchange}披露入口 · 当前未连接单条原文`, `${exchange} filing portal · original document not linked`) : item.type.includes("行情") || item.type.includes("数据") ? pick(isEnglish, "固定样例行情 · 非实时数据", "Fixed sample market data · not live") : pick(isEnglish, "演示外部线索 · 未连接原帖", "Sample external lead · original post not linked");
+  if (!evidence.length) return <div className={compact ? "evidence-list compact" : "evidence-list"}><article className="evidence-empty"><FileSearch /><div><strong>{pick(isEnglish, "尚未取得可核实来源", "No verifiable sources obtained")}</strong><p>{pick(isEnglish, "请先发起公开资料核实；系统不会用样例公告填充真实证据链。", "Start a public-source verification. Sample filings will not be inserted into a real evidence chain.")}</p></div></article></div>;
+  return <div className={compact ? "evidence-list compact" : "evidence-list"}>{evidence.map((item, index) => { const isExpanded = expanded === index; return <article key={`${item.title}-${index}`} className={isExpanded ? "evidence-row expanded" : "evidence-row"}><div className="evidence-marker"><span>{index + 1}</span><i /></div><div className="evidence-content"><div><time>{item.date}</time><span className="evidence-labels"><Badge variant={item.status.includes("待核实") || item.status.includes("交叉") || item.status.includes("Cross-check") ? "outline" : "secondary"}>{item.type} · {item.status}</Badge>{!compact && <em>{item.impact}</em>}</span></div>{item.url ? <a className="evidence-title-link" href={item.url} target="_blank" rel="noreferrer"><strong>{item.title}</strong><ExternalLink /></a> : <strong>{item.title}</strong>}{isExpanded && <><p>{item.detail}</p><span className="evidence-origin"><Database />{originFor(item)}</span></>}</div><Button variant="ghost" size="icon-sm" aria-expanded={isExpanded} aria-label={pick(isEnglish, `${isExpanded ? "收起" : "展开"} ${item.title}`, `${isExpanded ? "Collapse" : "Expand"} ${item.title}`)} onClick={() => setExpanded(isExpanded ? null : index)}>{isExpanded ? <ChevronDown /> : <ChevronRight />}</Button></article>; })}</div>;
 }
 
 function RecentTable({ onHistory, records }: { onHistory?: () => void; records: DecisionResult[] }) {
@@ -533,6 +538,7 @@ function DeskView({ onDecision, onResearch, onHistory, onPortfolio, latest, reco
 }
 
 function StockRail({ selected, onSelect, followedStocks, liveQuote, holdings }: { selected: Stock; onSelect: (stock: Stock) => void; followedStocks: Record<string, boolean>; liveQuote?: LiveQuote; holdings: HoldingBook }) {
+  const { isEnglish } = useI18n();
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState<"关注" | "持仓" | "最近">("关注");
   const holdingCodes = new Set(Object.keys(holdings));
@@ -548,10 +554,10 @@ function StockRail({ selected, onSelect, followedStocks, liveQuote, holdings }: 
   });
   return (
     <aside className="context-rail stock-rail">
-      <div className="stock-search"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="筛选股票" placeholder="名称、代码或行业" /></div>
-      <div className="rail-tabs">{(["关注", "持仓", "最近"] as const).map((item) => <button key={item} className={group === item ? "active" : ""} onClick={() => setGroup(item)}>{item}</button>)}</div>
-      <div className="stock-rail-list">{filteredStocks.map((stock) => { const isLiveSelection = Boolean(stock.code === selected.code && liveQuote); const price = isLiveSelection ? liveQuote?.current_price : undefined; const change = isLiveSelection ? liveQuote?.change_percent : undefined; return <button key={stock.code} className={stock.code === selected.code ? "active" : ""} onClick={() => onSelect(stock)}><span className="stock-ident"><i>{stock.name.slice(0, 1)}</i><span><b>{isLiveSelection && liveQuote?.stock_name ? liveQuote.stock_name : stock.name}</b><small>{stock.code}.{stock.market}</small></span></span><span className="stock-quote">{typeof price === "number" ? <><b>{price.toFixed(2)}</b><PriceChange value={change ?? 0} /></> : <small>打开后载入</small>}</span></button>; })}{filteredStocks.length === 0 && <div className="rail-empty"><Search /><strong>没有匹配股票</strong><span>可尝试输入 6 位代码</span></div>}</div>
-      <div className="context-link static">当前列表 {filteredStocks.length} 只 · 已选股票与本地关注</div>
+      <div className="stock-search"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} aria-label={pick(isEnglish, "筛选股票", "Filter stocks")} placeholder={pick(isEnglish, "名称、代码或行业", "Name, code or sector")} /></div>
+      <div className="rail-tabs">{(["关注", "持仓", "最近"] as const).map((item) => <button key={item} className={group === item ? "active" : ""} onClick={() => setGroup(item)}>{pick(isEnglish, item, item === "关注" ? "Watchlist" : item === "持仓" ? "Holdings" : "Recent")}</button>)}</div>
+      <div className="stock-rail-list">{filteredStocks.map((stock) => { const isLiveSelection = Boolean(stock.code === selected.code && liveQuote); const price = isLiveSelection ? liveQuote?.current_price : undefined; const change = isLiveSelection ? liveQuote?.change_percent : undefined; return <button key={stock.code} className={stock.code === selected.code ? "active" : ""} onClick={() => onSelect(stock)}><span className="stock-ident"><i>{stock.name.slice(0, 1)}</i><span><b>{isLiveSelection && liveQuote?.stock_name ? liveQuote.stock_name : stock.name}</b><small>{stock.code}.{stock.market}</small></span></span><span className="stock-quote">{typeof price === "number" ? <><b>{price.toFixed(2)}</b><PriceChange value={change ?? 0} /></> : <small>{pick(isEnglish, "打开后载入", "Load on open")}</small>}</span></button>; })}{filteredStocks.length === 0 && <div className="rail-empty"><Search /><strong>{pick(isEnglish, "没有匹配股票", "No matching stocks")}</strong><span>{pick(isEnglish, "可尝试输入 6 位代码", "Try a six-digit code")}</span></div>}</div>
+      <div className="context-link static">{pick(isEnglish, `当前列表 ${filteredStocks.length} 只 · 已选股票与本地关注`, `${filteredStocks.length} in this list · selected stock and local watchlist`)}</div>
     </aside>
   );
 }
@@ -644,6 +650,7 @@ function movingAverage(points: LiveHistoryPoint[], period: number) {
 }
 
 function PriceChart({ stock, liveHistory, events, holdingValue, capital }: { stock: Stock; liveHistory?: LiveHistoryPoint[]; events: Array<{ date: string; type: string; title: string; detail: string; source: string; url: string }>; holdingValue: number; capital: number }) {
+  const { isEnglish } = useI18n();
   const [range, setRange] = useState<"1月" | "3月" | "1年">("1月");
   const [selectedEventIndex, setSelectedEventIndex] = useState(0);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -662,7 +669,7 @@ function PriceChart({ stock, liveHistory, events, holdingValue, capital }: { sto
   }, []);
   const rangeDays = { "1月": 22, "3月": 66, "1年": 250 }[range];
   const livePoints = liveHistory && liveHistory.length > 1 ? liveHistory.slice(-rangeDays) : undefined;
-  if (!livePoints) return <div className="event-chart-empty"><TriangleAlert /><span><strong>历史价格暂不可用</strong><small>系统不会用样例曲线替代；恢复数据源后可重新打开本页。</small></span></div>;
+  if (!livePoints) return <div className="event-chart-empty"><TriangleAlert /><span><strong>{pick(isEnglish, "历史价格暂不可用", "Historical prices unavailable")}</strong><small>{pick(isEnglish, "系统不会用样例曲线替代；恢复数据源后可重新打开本页。", "Sample curves will not be substituted. Reopen this page when the source recovers.")}</small></span></div>;
   const benchmarkByDate = new Map(benchmark.map((point) => [point.date.slice(0, 10), point.close]));
   const benchmarkBase = benchmarkByDate.get(livePoints[0].date.slice(0, 10));
   const stockBase = Number(livePoints[0].close);
@@ -741,18 +748,18 @@ function PriceChart({ stock, liveHistory, events, holdingValue, capital }: { sto
   const moveHoverByKey = (direction: number) => setHoverIndex((current) => Math.max(0, Math.min(livePoints.length - 1, (current ?? livePoints.length - 1) + direction)));
   return (
     <div className={expanded ? "chart-block expanded" : "chart-block"}>
-      <div className="research-market-metrics" aria-label="当前区间关键市场指标">
-        <div><span>{range}收益</span><strong className={periodReturn >= 0 ? "price-up" : "price-down"}>{periodReturn >= 0 ? "+" : ""}{periodReturn.toFixed(1)}%</strong><small>区间首尾收盘</small></div>
-        <div><span>相对沪深300</span><strong className={typeof relativeReturn === "number" ? relativeReturn >= 0 ? "price-up" : "price-down" : ""}>{typeof relativeReturn === "number" ? `${relativeReturn >= 0 ? "+" : ""}${relativeReturn.toFixed(1)}%` : "暂无"}</strong><small>同起点比较</small></div>
-        <div><span>区间最大回撤</span><strong>{maxDrawdown.toFixed(1)}%</strong><small>从阶段高点计算</small></div>
-        <div><span>年化波动</span><strong>{annualizedVolatility.toFixed(1)}%</strong><small>日收益机械换算</small></div>
-        <div><span>最新成交量</span><strong>{typeof volumeRatio === "number" ? `${volumeRatio.toFixed(1)}×` : "暂无"}</strong><small>相对20日均量</small></div>
-        <div><span>可定位事件</span><strong>{events.length}</strong><small>当前公开资料</small></div>
+      <div className="research-market-metrics" aria-label={pick(isEnglish, "当前区间关键市场指标", "Key metrics for this range")}>
+        <div><span>{pick(isEnglish, `${range}收益`, `${range === "1月" ? "1M" : range === "3月" ? "3M" : "1Y"} return`)}</span><strong className={periodReturn >= 0 ? "price-up" : "price-down"}>{periodReturn >= 0 ? "+" : ""}{periodReturn.toFixed(1)}%</strong><small>{pick(isEnglish, "区间首尾收盘", "First-to-last close")}</small></div>
+        <div><span>{pick(isEnglish, "相对沪深300", "vs CSI 300")}</span><strong className={typeof relativeReturn === "number" ? relativeReturn >= 0 ? "price-up" : "price-down" : ""}>{typeof relativeReturn === "number" ? `${relativeReturn >= 0 ? "+" : ""}${relativeReturn.toFixed(1)}%` : pick(isEnglish, "暂无", "N/A")}</strong><small>{pick(isEnglish, "同起点比较", "Same starting point")}</small></div>
+        <div><span>{pick(isEnglish, "区间最大回撤", "Max drawdown")}</span><strong>{maxDrawdown.toFixed(1)}%</strong><small>{pick(isEnglish, "从阶段高点计算", "From the period peak")}</small></div>
+        <div><span>{pick(isEnglish, "年化波动", "Annualized volatility")}</span><strong>{annualizedVolatility.toFixed(1)}%</strong><small>{pick(isEnglish, "日收益机械换算", "From daily returns")}</small></div>
+        <div><span>{pick(isEnglish, "最新成交量", "Latest volume")}</span><strong>{typeof volumeRatio === "number" ? `${volumeRatio.toFixed(1)}×` : pick(isEnglish, "暂无", "N/A")}</strong><small>{pick(isEnglish, "相对20日均量", "vs 20-day average")}</small></div>
+        <div><span>{pick(isEnglish, "可定位事件", "Located events")}</span><strong>{events.length}</strong><small>{pick(isEnglish, "当前公开资料", "Current public sources")}</small></div>
       </div>
-      <div className="chart-toolbar"><div><strong>{livePoints.length} 个交易日</strong><span>真实历史数据</span><small>{livePoints.length < rangeDays ? `当前来源仅覆盖 ${livePoints.length} 个交易日，少于所选 ${range}` : `数据区间：最高 ${chartHigh.toFixed(axisPrecision)} · 最低 ${chartLow.toFixed(axisPrecision)}`}</small></div><div className="chart-controls"><div className="chart-display-selector" aria-label="图表样式"><button className={chartMode === "candlestick" ? "active" : ""} onClick={() => setChartMode("candlestick")}>K线</button><button className={chartMode === "line" ? "active" : ""} onClick={() => setChartMode("line")}>折线</button><button className={showMa5 ? "active" : ""} aria-pressed={showMa5} onClick={() => setShowMa5((value) => !value)}>MA5</button><button className={showMa20 ? "active" : ""} aria-pressed={showMa20} onClick={() => setShowMa20((value) => !value)}>MA20</button></div><div className="range-selector">{(["1月", "3月", "1年"] as const).map((item) => <button key={item} className={range === item ? "active" : ""} onClick={() => { setRange(item); setHoverIndex(null); }}>{item}</button>)}</div><button className="chart-size-toggle" onClick={() => setExpanded((current) => !current)} aria-label={expanded ? "收起走势图" : "放大走势图"}>{expanded ? <Minimize2 /> : <Maximize2 />}</button></div></div>
+      <div className="chart-toolbar"><div><strong>{pick(isEnglish, `${livePoints.length} 个交易日`, `${livePoints.length} trading days`)}</strong><span>{pick(isEnglish, "真实历史数据", "Historical market data")}</span><small>{livePoints.length < rangeDays ? pick(isEnglish, `当前来源仅覆盖 ${livePoints.length} 个交易日，少于所选 ${range}`, `The source covers ${livePoints.length} days, shorter than the selected range`) : pick(isEnglish, `数据区间：最高 ${chartHigh.toFixed(axisPrecision)} · 最低 ${chartLow.toFixed(axisPrecision)}`, `Range: high ${chartHigh.toFixed(axisPrecision)} · low ${chartLow.toFixed(axisPrecision)}`)}</small></div><div className="chart-controls"><div className="chart-display-selector" aria-label={pick(isEnglish, "图表样式", "Chart style")}><button className={chartMode === "candlestick" ? "active" : ""} onClick={() => setChartMode("candlestick")}>{pick(isEnglish, "K线", "Candles")}</button><button className={chartMode === "line" ? "active" : ""} onClick={() => setChartMode("line")}>{pick(isEnglish, "折线", "Line")}</button><button className={showMa5 ? "active" : ""} aria-pressed={showMa5} onClick={() => setShowMa5((value) => !value)}>MA5</button><button className={showMa20 ? "active" : ""} aria-pressed={showMa20} onClick={() => setShowMa20((value) => !value)}>MA20</button></div><div className="range-selector">{(["1月", "3月", "1年"] as const).map((item) => <button key={item} className={range === item ? "active" : ""} onClick={() => { setRange(item); setHoverIndex(null); }}>{pick(isEnglish, item, item === "1月" ? "1M" : item === "3月" ? "3M" : "1Y")}</button>)}</div><button className="chart-size-toggle" onClick={() => setExpanded((current) => !current)} aria-label={expanded ? pick(isEnglish, "收起走势图", "Collapse chart") : pick(isEnglish, "放大走势图", "Expand chart")}>{expanded ? <Minimize2 /> : <Maximize2 />}</button></div></div>
       <div className="chart-wrap">
       <div className="chart-grid">{axisValues.map((value) => <span key={value}>{value}</span>)}</div>
-      <svg viewBox="0 0 690 190" role="img" tabIndex={0} aria-label={`${stock.name}${range}价格、基准、成交量与事件走势；可用左右方向键逐日查看`} preserveAspectRatio="none" onMouseMove={moveHover} onMouseLeave={() => setHoverIndex(null)} onKeyDown={(event) => { if (event.key === "ArrowLeft") { event.preventDefault(); moveHoverByKey(-1); } if (event.key === "ArrowRight") { event.preventDefault(); moveHoverByKey(1); } }}>
+      <svg viewBox="0 0 690 190" role="img" tabIndex={0} aria-label={pick(isEnglish, `${stock.name}${range}价格、基准、成交量与事件走势；可用左右方向键逐日查看`, `${stock.name} price, benchmark, volume and events; use left and right arrow keys to inspect each day`)} preserveAspectRatio="none" onMouseMove={moveHover} onMouseLeave={() => setHoverIndex(null)} onKeyDown={(event) => { if (event.key === "ArrowLeft") { event.preventDefault(); moveHoverByKey(-1); } if (event.key === "ArrowRight") { event.preventDefault(); moveHoverByKey(1); } }}>
         <defs><linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="var(--primary)" stopOpacity=".2"/><stop offset="100%" stopColor="var(--primary)" stopOpacity="0"/></linearGradient></defs>
         {chartMode === "line" && <><path className="chart-area" d={`${chartPath} L690 190 L0 190 Z`} /><path className="chart-line" d={chartPath} /></>}
         {chartMode === "candlestick" && <g className="chart-candlesticks">{livePoints.map((point, index) => {
@@ -767,36 +774,38 @@ function PriceChart({ stock, liveHistory, events, holdingValue, capital }: { sto
         {benchmarkPath && <path className="chart-benchmark-line" d={benchmarkPath} />}
         {showMa5 && ma5Path && <path className="chart-ma5-line" d={ma5Path} />}
         {showMa20 && ma20Path && <path className="chart-ma20-line" d={ma20Path} />}
-        {eventMarkers.map((event, index) => <g key={`${event.date}-${event.title}`} role="button" tabIndex={0} aria-label={`查看事件 ${index + 1}：${event.title}`} onClick={() => setSelectedEventIndex(index)} onKeyDown={(keyEvent) => { if (keyEvent.key === "Enter" || keyEvent.key === " ") setSelectedEventIndex(index); }} className={index === activeEventIndex ? "chart-event-marker active" : "chart-event-marker"}><line x1={event.x} x2={event.x} y1="18" y2="178" /><circle cx={event.x} cy={event.y} r={index === activeEventIndex ? 6 : 4} /><text x={event.x} y="14" textAnchor="middle">{index + 1}</text></g>)}
+        {eventMarkers.map((event, index) => <g key={`${event.date}-${event.title}`} role="button" tabIndex={0} aria-label={pick(isEnglish, `查看事件 ${index + 1}：${event.title}`, `View event ${index + 1}: ${event.title}`)} onClick={() => setSelectedEventIndex(index)} onKeyDown={(keyEvent) => { if (keyEvent.key === "Enter" || keyEvent.key === " ") setSelectedEventIndex(index); }} className={index === activeEventIndex ? "chart-event-marker active" : "chart-event-marker"}><line x1={event.x} x2={event.x} y1="18" y2="178" /><circle cx={event.x} cy={event.y} r={index === activeEventIndex ? 6 : 4} /><text x={event.x} y="14" textAnchor="middle">{index + 1}</text></g>)}
         {hoveredPoint && hoverIndex !== null && <g className="chart-hover-guide"><line x1={hoverX} x2={hoverX} y1="18" y2="178" /><line x1="0" x2="690" y1={hoverY} y2={hoverY} /><circle cx={hoverX} cy={hoverY} r="4" /></g>}
       </svg>
-      {hoveredPoint && hoverIndex !== null && <div className={hoverX > 500 ? "research-chart-tooltip align-right" : "research-chart-tooltip"} style={{ left: `calc(42px + ${(hoverX / 690) * 100}% - ${(hoverX / 690) * 42}px)` }} role="status"><strong>{hoveredPoint.date.slice(0, 10)}</strong><span>开 / 高<b>{Number(hoveredPoint.open ?? hoveredPoint.close).toFixed(2)} / {Number(hoveredPoint.high ?? hoveredPoint.close).toFixed(2)}</b></span><span>低 / 收<b>{Number(hoveredPoint.low ?? hoveredPoint.close).toFixed(2)} / {hoveredPoint.close.toFixed(2)}</b></span><span>当日涨跌<b className={typeof hoveredChange === "number" ? hoveredChange >= 0 ? "price-up" : "price-down" : ""}>{typeof hoveredChange === "number" ? `${hoveredChange >= 0 ? "+" : ""}${hoveredChange.toFixed(2)}%` : "—"}</b></span><span>同期沪深300<b>{typeof hoveredBenchmarkChange === "number" ? `${hoveredBenchmarkChange >= 0 ? "+" : ""}${hoveredBenchmarkChange.toFixed(2)}%` : "—"}</b></span><span>成交量<b>{hoveredPoint.volume ? hoveredPoint.volume.toLocaleString("zh-CN") : "暂无"}</b></span></div>}
+      {hoveredPoint && hoverIndex !== null && <div className={hoverX > 500 ? "research-chart-tooltip align-right" : "research-chart-tooltip"} style={{ left: `calc(42px + ${(hoverX / 690) * 100}% - ${(hoverX / 690) * 42}px)` }} role="status"><strong>{hoveredPoint.date.slice(0, 10)}</strong><span>{pick(isEnglish, "开 / 高", "Open / High")}<b>{Number(hoveredPoint.open ?? hoveredPoint.close).toFixed(2)} / {Number(hoveredPoint.high ?? hoveredPoint.close).toFixed(2)}</b></span><span>{pick(isEnglish, "低 / 收", "Low / Close")}<b>{Number(hoveredPoint.low ?? hoveredPoint.close).toFixed(2)} / {hoveredPoint.close.toFixed(2)}</b></span><span>{pick(isEnglish, "当日涨跌", "Daily change")}<b className={typeof hoveredChange === "number" ? hoveredChange >= 0 ? "price-up" : "price-down" : ""}>{typeof hoveredChange === "number" ? `${hoveredChange >= 0 ? "+" : ""}${hoveredChange.toFixed(2)}%` : "—"}</b></span><span>{pick(isEnglish, "同期沪深300", "CSI 300")}<b>{typeof hoveredBenchmarkChange === "number" ? `${hoveredBenchmarkChange >= 0 ? "+" : ""}${hoveredBenchmarkChange.toFixed(2)}%` : "—"}</b></span><span>{pick(isEnglish, "成交量", "Volume")}<b>{hoveredPoint.volume ? hoveredPoint.volume.toLocaleString(isEnglish ? "en-US" : "zh-CN") : pick(isEnglish, "暂无", "N/A")}</b></span></div>}
       <div className="chart-dates">{dateLabels.map((date) => <span key={date}>{date.slice(0, 10)}</span>)}</div>
       </div>
-      <div className="volume-strip" aria-label="成交量变化">{volumes.map((value, index) => <i key={index} style={{ height: `${value}%` }} />)}</div>
-      <div className="chart-legend"><span><i className="price-line-key" />{stock.name} {chartMode === "candlestick" ? "K线" : "收盘价"}</span>{showMa5 && <span><i className="ma5-line-key" />MA5</span>}{showMa20 && <span><i className="ma20-line-key" />MA20</span>}{benchmarkPath && <span><i className="benchmark-line-key" />沪深300（同起点）</span>}<span><i className="event-key" />公司事件</span><span><i className="volume-key" />成交量</span></div>
-      {eventMarkers.length > 0 ? <section className="event-price-bridge" aria-label="事件与价格变化对照">
+      <div className="volume-strip" aria-label={pick(isEnglish, "成交量变化", "Volume changes")}>{volumes.map((value, index) => <i key={index} style={{ height: `${value}%` }} />)}</div>
+      <div className="chart-legend"><span><i className="price-line-key" />{stock.name} {chartMode === "candlestick" ? pick(isEnglish, "K线", "Candles") : pick(isEnglish, "收盘价", "Close")}</span>{showMa5 && <span><i className="ma5-line-key" />MA5</span>}{showMa20 && <span><i className="ma20-line-key" />MA20</span>}{benchmarkPath && <span><i className="benchmark-line-key" />{pick(isEnglish, "沪深300（同起点）", "CSI 300 (same base)")}</span>}<span><i className="event-key" />{pick(isEnglish, "公司事件", "Company events")}</span><span><i className="volume-key" />{pick(isEnglish, "成交量", "Volume")}</span></div>
+      {eventMarkers.length > 0 ? <section className="event-price-bridge" aria-label={pick(isEnglish, "事件与价格变化对照", "Event and price comparison")}>
         <div className="event-marker-list">{eventMarkers.map((event, index) => <button key={`${event.date}-${event.title}`} className={index === activeEventIndex ? "active" : ""} onClick={() => setSelectedEventIndex(index)}><i>{index + 1}</i><span><small>{event.date} · {event.type}</small><strong>{event.title}</strong></span></button>)}</div>
-        {selectedEvent && <article className="selected-event-impact"><header><span><Badge variant="outline">事件 {activeEventIndex + 1}</Badge><small>{selectedEvent.source}</small></span>{selectedEvent.url && <a href={selectedEvent.url} target="_blank" rel="noreferrer">原始来源<ExternalLink /></a>}</header><h3>{selectedEvent.title}</h3><p>{selectedEvent.detail}</p><div className="event-impact-metrics"><div><span>下一交易日</span><strong className={selectedEvent.nextChange >= 0 ? "price-up" : "price-down"}>{selectedEvent.nextChange >= 0 ? "+" : ""}{selectedEvent.nextChange.toFixed(2)}%</strong><small>{selectedEvent.nextPoint.date.slice(0, 10)}</small></div><ArrowRight /><div><span>随后 5 个交易日</span><strong className={selectedEvent.fifthChange >= 0 ? "price-up" : "price-down"}>{selectedEvent.fifthChange >= 0 ? "+" : ""}{selectedEvent.fifthChange.toFixed(2)}%</strong><small>{typeof selectedEvent.benchmarkChange === "number" ? `同期沪深300 ${selectedEvent.benchmarkChange >= 0 ? "+" : ""}${selectedEvent.benchmarkChange.toFixed(2)}%` : "基准数据暂不可用"}</small></div><ArrowRight /><div><span>按当前持仓机械换算</span><strong>{holdingValue > 0 ? `${mechanicalImpact >= 0 ? "+" : "−"}¥${Math.abs(mechanicalImpact).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}` : "尚无持仓"}</strong><small>{holdingValue > 0 ? `按下一交易日 · 占记录资金 ${capital > 0 ? (holdingValue / capital * 100).toFixed(1) : "0.0"}%` : "导入持仓后显示金额影响"}</small></div></div><footer>时间相邻不代表因果；跑赢基准也不能证明事件是价格变化原因。金额仅按价格变化机械换算。</footer></article>}
-      </section> : <div className="event-chart-empty"><FileSearch /><span><strong>当前价格区间内没有可定位事件</strong><small>取得带日期的正式披露后，事件会标注在价格曲线上。</small></span></div>}
+        {selectedEvent && <article className="selected-event-impact"><header><span><Badge variant="outline">{pick(isEnglish, `事件 ${activeEventIndex + 1}`, `Event ${activeEventIndex + 1}`)}</Badge><small>{selectedEvent.source}</small></span>{selectedEvent.url && <a href={selectedEvent.url} target="_blank" rel="noreferrer">{pick(isEnglish, "原始来源", "Original source")}<ExternalLink /></a>}</header><h3>{selectedEvent.title}</h3><p>{selectedEvent.detail}</p><div className="event-impact-metrics"><div><span>{pick(isEnglish, "下一交易日", "Next trading day")}</span><strong className={selectedEvent.nextChange >= 0 ? "price-up" : "price-down"}>{selectedEvent.nextChange >= 0 ? "+" : ""}{selectedEvent.nextChange.toFixed(2)}%</strong><small>{selectedEvent.nextPoint.date.slice(0, 10)}</small></div><ArrowRight /><div><span>{pick(isEnglish, "随后 5 个交易日", "Following 5 trading days")}</span><strong className={selectedEvent.fifthChange >= 0 ? "price-up" : "price-down"}>{selectedEvent.fifthChange >= 0 ? "+" : ""}{selectedEvent.fifthChange.toFixed(2)}%</strong><small>{typeof selectedEvent.benchmarkChange === "number" ? pick(isEnglish, `同期沪深300 ${selectedEvent.benchmarkChange >= 0 ? "+" : ""}${selectedEvent.benchmarkChange.toFixed(2)}%`, `CSI 300 ${selectedEvent.benchmarkChange >= 0 ? "+" : ""}${selectedEvent.benchmarkChange.toFixed(2)}%`) : pick(isEnglish, "基准数据暂不可用", "Benchmark unavailable")}</small></div><ArrowRight /><div><span>{pick(isEnglish, "按当前持仓机械换算", "Mechanical holding impact")}</span><strong>{holdingValue > 0 ? `${mechanicalImpact >= 0 ? "+" : "−"}¥${Math.abs(mechanicalImpact).toLocaleString(isEnglish ? "en-US" : "zh-CN", { maximumFractionDigits: 0 })}` : pick(isEnglish, "尚无持仓", "No holding")}</strong><small>{holdingValue > 0 ? pick(isEnglish, `按下一交易日 · 占记录资金 ${capital > 0 ? (holdingValue / capital * 100).toFixed(1) : "0.0"}%`, `Next-day move · ${capital > 0 ? (holdingValue / capital * 100).toFixed(1) : "0.0"}% of recorded capital`) : pick(isEnglish, "导入持仓后显示金额影响", "Import holdings to see monetary impact")}</small></div></div><footer>{pick(isEnglish, "时间相邻不代表因果；跑赢基准也不能证明事件是价格变化原因。金额仅按价格变化机械换算。", "Timing does not prove causality. Beating the benchmark does not establish that the event caused the move. Monetary impact is a mechanical conversion only.")}</footer></article>}
+      </section> : <div className="event-chart-empty"><FileSearch /><span><strong>{pick(isEnglish, "当前价格区间内没有可定位事件", "No dated events in this price range")}</strong><small>{pick(isEnglish, "取得带日期的正式披露后，事件会标注在价格曲线上。", "Dated filings will be marked on the price chart when available.")}</small></span></div>}
     </div>
   );
 }
 
 function ResearchActionPanel({ stock, action, setAction, onDecision, saved, onSave, dataStatus, holdings, capital }: { stock: Stock; action: TradeAction; setAction: (action: TradeAction) => void; onDecision: () => void; saved: boolean; onSave: () => void; dataStatus: InformationSnapshot["status"] | "loading"; holdings: HoldingBook; capital: number }) {
+  const { isEnglish } = useI18n();
   const actions: TradeAction[] = ["买入", "补仓", "卖出", "继续观察"];
+  const actionLabel = (item: TradeAction) => pick(isEnglish, item, item === "买入" ? "Buy" : item === "补仓" ? "Add" : item === "卖出" ? "Sell" : "Watch");
   const holdingValue = holdingValueFor(holdings, stock.code);
   const holdingRatio = capital > 0 ? holdingValue / capital * 100 : 0;
   const instrumentUnavailable = dataStatus === "fallback";
   return (
     <aside className="research-aside">
-      <div className="aside-heading"><Target /><div><h2>准备做什么</h2><p>针对 {stock.name}</p></div></div>
-      <div className="action-segments" role="radiogroup" aria-label="选择操作">{actions.map((item) => { const unavailable = holdingValue === 0 && (item === "补仓" || item === "卖出"); return <button key={item} role="radio" aria-checked={action === item} className={action === item ? "active" : ""} disabled={unavailable} title={unavailable ? "当前没有这只股票的持仓" : undefined} onClick={() => setAction(item)}>{action === item && <Check />}{item}</button>; })}</div>
-      <div className="action-summary"><span>当前持仓</span><strong>{holdingValue > 0 ? `¥${holdingValue.toLocaleString()}` : "尚无持仓"}</strong><small>{holdingValue > 0 ? `占记录资产 ${holdingRatio.toFixed(1)}%` : "可从买入或继续观察开始"}</small></div>
+      <div className="aside-heading"><Target /><div><h2>{pick(isEnglish, "准备做什么", "What are you considering?")}</h2><p>{pick(isEnglish, `针对 ${stock.name}`, `For ${stock.name}`)}</p></div></div>
+      <div className="action-segments" role="radiogroup" aria-label={pick(isEnglish, "选择操作", "Choose an action")}>{actions.map((item) => { const unavailable = holdingValue === 0 && (item === "补仓" || item === "卖出"); return <button key={item} role="radio" aria-checked={action === item} className={action === item ? "active" : ""} disabled={unavailable} title={unavailable ? pick(isEnglish, "当前没有这只股票的持仓", "You do not hold this stock") : undefined} onClick={() => setAction(item)}>{action === item && <Check />}{actionLabel(item)}</button>; })}</div>
+      <div className="action-summary"><span>{pick(isEnglish, "当前持仓", "Current holding")}</span><strong>{holdingValue > 0 ? `¥${holdingValue.toLocaleString()}` : pick(isEnglish, "尚无持仓", "No holding")}</strong><small>{holdingValue > 0 ? pick(isEnglish, `占记录资产 ${holdingRatio.toFixed(1)}%`, `${holdingRatio.toFixed(1)}% of recorded assets`) : pick(isEnglish, "可从买入或继续观察开始", "Start with Buy or Watch")}</small></div>
       <Separator />
-      <div className="aside-checks"><h3>进入决策前</h3><p><CheckCircle2 />{dataStatus === "live" ? "实时行情与历史价格已载入" : dataStatus === "partial" ? "部分实时数据已载入" : dataStatus === "loading" ? "正在连接行情服务" : "证券代码或行情尚未确认"}</p><p><TriangleAlert />{instrumentUnavailable ? "请先检查证券代码后重试" : "1 条外部信息待核实"}</p><p><Gauge />进入后计算仓位与下跌情景</p></div>
-      <Button size="lg" onClick={onDecision} disabled={action === "继续观察" || instrumentUnavailable}>{instrumentUnavailable ? "等待标的确认" : action === "继续观察" ? "已加入观察" : `开始${action}审查`}<ArrowRight data-icon="inline-end" /></Button>
-      <button className={saved ? "aside-secondary saved" : "aside-secondary"} onClick={onSave}>{saved ? <CheckCircle2 /> : <Bookmark />}{saved ? "已保存在本次会话" : "保存研究档案"}</button>
+      <div className="aside-checks"><h3>{pick(isEnglish, "进入决策前", "Before the review")}</h3><p><CheckCircle2 />{dataStatus === "live" ? pick(isEnglish, "实时行情与历史价格已载入", "Market and historical prices loaded") : dataStatus === "partial" ? pick(isEnglish, "部分实时数据已载入", "Partial market data loaded") : dataStatus === "loading" ? pick(isEnglish, "正在连接行情服务", "Connecting to market data") : pick(isEnglish, "证券代码或行情尚未确认", "Security or market data unconfirmed")}</p><p><TriangleAlert />{instrumentUnavailable ? pick(isEnglish, "请先检查证券代码后重试", "Check the security code and retry") : pick(isEnglish, "1 条外部信息待核实", "1 external claim requires verification")}</p><p><Gauge />{pick(isEnglish, "进入后计算仓位与下跌情景", "Position and downside scenarios are calculated next")}</p></div>
+      <Button size="lg" onClick={onDecision} disabled={action === "继续观察" || instrumentUnavailable}>{instrumentUnavailable ? pick(isEnglish, "等待标的确认", "Waiting for security confirmation") : action === "继续观察" ? pick(isEnglish, "已加入观察", "Added to watchlist") : pick(isEnglish, `开始${action}审查`, `Review ${actionLabel(action)}`)}<ArrowRight data-icon="inline-end" /></Button>
+      <button className={saved ? "aside-secondary saved" : "aside-secondary"} onClick={onSave}>{saved ? <CheckCircle2 /> : <Bookmark />}{saved ? pick(isEnglish, "已保存在本次会话", "Saved in this session") : pick(isEnglish, "保存研究档案", "Save research record")}</button>
     </aside>
   );
 }
@@ -847,6 +856,7 @@ function QuantVerificationPanel({ stock, saved, onSave, onDecision }: { stock: S
 }
 
 function ResearchView({ stock, setStock, action, setAction, onDecision, holdings, watched, onWatch, capital, records, quantVerifications, onSaveQuant }: { stock: Stock; setStock: (stock: Stock) => void; action: TradeAction; setAction: (action: TradeAction) => void; onDecision: (context?: ResearchDecisionContext) => void; holdings: HoldingBook; watched: WatchBook; onWatch: (stock: Stock, followed: boolean) => void; capital: number; records: DecisionResult[]; quantVerifications: SavedQuantVerification[]; onSaveQuant: (verification: SavedQuantVerification) => void }) {
+  const { isEnglish } = useI18n();
   const [panel, setPanel] = useState<"概览" | "财报体检" | "价格与事件" | "证据链" | "定量核实" | "待验证问题">("价格与事件");
   const [researchQuery, setResearchQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
@@ -875,10 +885,10 @@ function ResearchView({ stock, setStock, action, setAction, onDecision, holdings
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setInformation({ requestedCode: stock.code, status: "fallback", message: "实时服务暂不可用" });
+        setInformation({ requestedCode: stock.code, status: "fallback", message: pick(isEnglish, "实时服务暂不可用", "Live services are unavailable") });
       });
     return () => controller.abort();
-  }, [stock.code]);
+  }, [stock.code, isEnglish]);
   useEffect(() => {
     const controller = new AbortController();
     const requestedCode = stock.code;
@@ -920,11 +930,11 @@ function ResearchView({ stock, setStock, action, setAction, onDecision, holdings
   const currentEvidence = researchEvidence?.requestedCode === stock.code && researchEvidence.requestedQuery === submittedQuery ? researchEvidence : undefined;
   const currentFinancialQuery = financialQuery?.requestedCode === stock.code && financialQuery.requestedQuery === submittedQuery ? financialQuery : undefined;
   const liveEvidence = currentEvidence?.payload ?? currentInformation?.evidence;
-  const stockEvents = (liveEvidence?.feed?.items ?? []).slice(0, 5).map((item) => ({ date: item.published_at?.slice(0, 10) || "日期未知", type: item.category, title: item.title, detail: item.summary, source: item.source, url: item.url }));
+  const stockEvents = (liveEvidence?.feed?.items ?? []).slice(0, 5).map((item) => ({ date: item.published_at?.slice(0, 10) || pick(isEnglish, "日期未知", "Date unknown"), type: item.category, title: item.title, detail: item.summary, source: item.source, url: item.url }));
   const evidenceCount = liveEvidence?.feed?.items?.length ?? 0;
   const officialCount = liveEvidence?.radar?.official_count ?? 0;
   const sourceCount = liveEvidence?.radar?.source_count ?? 0;
-  const assessmentStatus = liveEvidence?.assessment?.status ?? "尚未取得证据";
+  const assessmentStatus = liveEvidence?.assessment?.status ?? pick(isEnglish, "尚未取得证据", "No evidence obtained");
   const dataStatus: InformationSnapshot["status"] | "loading" = currentInformation?.status ?? "loading";
   const quote = currentInformation?.quote;
   const historyPoints = currentInformation?.history?.data ?? [];
@@ -940,12 +950,12 @@ function ResearchView({ stock, setStock, action, setAction, onDecision, holdings
   const displayName = quote?.stock_name || stock.name;
   const displayPrice = quote?.current_price;
   const displayChange = quote?.change_percent;
-  const displayTurnover = quote?.amount ? `${(quote.amount / 100_000_000).toFixed(1)} 亿` : "暂无";
+  const displayTurnover = quote?.amount ? pick(isEnglish, `${(quote.amount / 100_000_000).toFixed(1)} 亿`, `¥${(quote.amount / 100_000_000).toFixed(1)}bn`) : pick(isEnglish, "暂无", "N/A");
   const displayIndustry = quote && stock.industry.includes("正在载入") ? "A股" : stock.industry;
   const updateLabel = quote?.update_time
-    ? `最近交易日 ${new Date(quote.update_time).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}`
-    : dataStatus === "loading" ? "等待公开行情" : "公开行情暂不可用";
-  const statusLabel = dataStatus === "live" ? "实时数据" : dataStatus === "partial" ? "部分实时" : dataStatus === "cached" ? "最近缓存" : dataStatus === "loading" ? "连接数据源" : "数据暂不可用";
+    ? pick(isEnglish, `最近交易日 ${new Date(quote.update_time).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}`, `Latest session ${new Date(quote.update_time).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`)
+    : dataStatus === "loading" ? pick(isEnglish, "等待公开行情", "Waiting for market data") : pick(isEnglish, "公开行情暂不可用", "Market data unavailable");
+  const statusLabel = dataStatus === "live" ? pick(isEnglish, "实时数据", "Live data") : dataStatus === "partial" ? pick(isEnglish, "部分实时", "Partial live data") : dataStatus === "cached" ? pick(isEnglish, "最近缓存", "Recent cache") : dataStatus === "loading" ? pick(isEnglish, "连接数据源", "Connecting sources") : pick(isEnglish, "数据暂不可用", "Data unavailable");
   const effectiveStock = { ...stock, name: displayName, price: displayPrice ?? 0, change: displayChange ?? 0, turnover: displayTurnover };
   const researchSummary = liveEvidence?.assessment?.summary
     ?? (dataStatus === "live" || dataStatus === "partial"
@@ -955,12 +965,12 @@ function ResearchView({ stock, setStock, action, setAction, onDecision, holdings
         : currentInformation?.message ?? "实时资料暂不可用。请稍后重试；系统不会用样例结论替代。 ");
   const researchTasks = submittedQuery
     ? [
-        ...(submittedQuery.match(/订单|公告|回购|减持|增持|合同|中标|并购|重组/) ? ["核对公司披露"] : []),
-        ...(submittedQuery.match(/财报|营收|利润|现金流|应收|存货|负债/) ? ["检查财务报表"] : []),
-        ...(submittedQuery.match(/涨|跌|价格|成交|放量|走势/) ? ["计算价格变化"] : []),
-        "追溯公开来源",
+        ...(submittedQuery.match(/订单|公告|回购|减持|增持|合同|中标|并购|重组|order|filing|buyback|contract|merger/i) ? [pick(isEnglish, "核对公司披露", "Check company filings")] : []),
+        ...(submittedQuery.match(/财报|营收|利润|现金流|应收|存货|负债|financial|revenue|profit|cash flow|receivable|inventory|debt/i) ? [pick(isEnglish, "检查财务报表", "Check financial statements")] : []),
+        ...(submittedQuery.match(/涨|跌|价格|成交|放量|走势|price|volume|trend/i) ? [pick(isEnglish, "计算价格变化", "Calculate price changes")] : []),
+        pick(isEnglish, "追溯公开来源", "Trace public sources"),
       ].filter((item, index, items) => items.indexOf(item) === index)
-    : ["读取近期披露", "追溯公开来源"];
+    : [pick(isEnglish, "读取近期披露", "Read recent filings"), pick(isEnglish, "追溯公开来源", "Trace public sources")];
   const financialAttentionCount = currentFinancialQuery?.payload?.checks.filter((item) => item.state === "attention" || item.state === "watch").length ?? 0;
   return (
     <div className="shell-with-context view-enter">
@@ -968,17 +978,17 @@ function ResearchView({ stock, setStock, action, setAction, onDecision, holdings
       <main className="research-layout" id="main-content">
         <article className="workspace research-dossier">
           <header className="stock-dossier-header">
-            <div><div className="stock-title-line"><h1>{displayName}</h1><Badge variant="outline">{stock.code}.{stock.market}</Badge><Button variant="ghost" size="icon-sm" className={followed ? "active" : ""} aria-label={followed ? "取消关注股票" : "关注股票"} aria-pressed={followed} onClick={() => onWatch({ ...effectiveStock, name: displayName }, !followed)}>{followed ? <Check /> : <Bookmark />}</Button></div><p>{displayIndustry} · {updateLabel}</p><span className={`live-data-status ${dataStatus}`}><i />{statusLabel}<small>{currentInformation?.provider ?? "daily_stock_analysis"}</small></span></div>
-            <div className="stock-live-price"><strong>{typeof displayPrice === "number" ? displayPrice.toFixed(2) : "—"}</strong>{typeof displayChange === "number" && <PriceChange value={displayChange} />}<small>成交额 {displayTurnover}</small></div>
+            <div><div className="stock-title-line"><h1>{displayName}</h1><Badge variant="outline">{stock.code}.{stock.market}</Badge><Button variant="ghost" size="icon-sm" className={followed ? "active" : ""} aria-label={followed ? pick(isEnglish, "取消关注股票", "Remove from watchlist") : pick(isEnglish, "关注股票", "Add to watchlist")} aria-pressed={followed} onClick={() => onWatch({ ...effectiveStock, name: displayName }, !followed)}>{followed ? <Check /> : <Bookmark />}</Button></div><p>{displayIndustry} · {updateLabel}</p><span className={`live-data-status ${dataStatus}`}><i />{statusLabel}<small>{currentInformation?.provider ?? "daily_stock_analysis"}</small></span></div>
+            <div className="stock-live-price"><strong>{typeof displayPrice === "number" ? displayPrice.toFixed(2) : "—"}</strong>{typeof displayChange === "number" && <PriceChange value={displayChange} />}<small>{pick(isEnglish, "成交额", "Turnover")} {displayTurnover}</small></div>
           </header>
           <form className="research-query-bar" onSubmit={(event) => { event.preventDefault(); const query = researchQuery.trim(); if (!query) return; setSubmittedQuery(query); setPanel("证据链"); }}>
-            <div><Search /><span><strong>研究一个具体问题</strong><small>例如：最近订单增长是否有公告和现金流支持？</small></span></div>
-            <Input aria-label="输入研究问题" value={researchQuery} onChange={(event) => setResearchQuery(event.target.value)} placeholder="输入你想核实的说法、新闻或财务问题" />
-            <Button type="submit" disabled={!researchQuery.trim()}>开始核实</Button>
-            <div className="research-task-preview"><span>{submittedQuery ? "本次核实路径" : "默认检查"}</span>{researchTasks.map((task) => <Badge key={task} variant="outline">{task}</Badge>)}</div>
+            <div><Search /><span><strong>{pick(isEnglish, "研究一个具体问题", "Research a specific question")}</strong><small>{pick(isEnglish, "例如：最近订单增长是否有公告和现金流支持？", "Example: Is recent order growth supported by filings and cash flow?")}</small></span></div>
+            <Input aria-label={pick(isEnglish, "输入研究问题", "Enter a research question")} value={researchQuery} onChange={(event) => setResearchQuery(event.target.value)} placeholder={pick(isEnglish, "输入你想核实的说法、新闻或财务问题", "Enter a claim, news item or financial question to verify")} />
+            <Button type="submit" disabled={!researchQuery.trim()}>{pick(isEnglish, "开始核实", "Verify")}</Button>
+            <div className="research-task-preview"><span>{submittedQuery ? pick(isEnglish, "本次核实路径", "Verification path") : pick(isEnglish, "默认检查", "Default checks")}</span>{researchTasks.map((task) => <Badge key={task} variant="outline">{task}</Badge>)}</div>
           </form>
-          <section className="since-last-strip"><div><TimerReset /><span><strong>当前资料状态</strong><small>{currentEvidence?.status === "loading" ? "公开资料核实中" : `${officialCount} 条正式披露 · ${sourceCount} 个独立来源`} · {currentInformation?.history?.data?.length ?? 0} 个价格点</small></span></div><button onClick={() => setPanel("证据链")}>查看证据来源 <ChevronRight /></button></section>
-          <nav className="research-tabs" aria-label="研究视图">{(["价格与事件", "财报体检", "证据链", "定量核实", "概览", "待验证问题"] as const).map((item) => <button key={item} className={panel === item ? "active" : ""} onClick={() => setPanel(item)}>{item}{item === "证据链" && <i>{evidenceCount}</i>}{item === "待验证问题" && <i>3</i>}</button>)}</nav>
+          <section className="since-last-strip"><div><TimerReset /><span><strong>{pick(isEnglish, "当前资料状态", "Current source status")}</strong><small>{currentEvidence?.status === "loading" ? pick(isEnglish, "公开资料核实中", "Verifying public sources") : pick(isEnglish, `${officialCount} 条正式披露 · ${sourceCount} 个独立来源`, `${officialCount} official filings · ${sourceCount} independent sources`)} · {pick(isEnglish, `${currentInformation?.history?.data?.length ?? 0} 个价格点`, `${currentInformation?.history?.data?.length ?? 0} price points`)}</small></span></div><button onClick={() => setPanel("证据链")}>{pick(isEnglish, "查看证据来源", "View evidence sources")} <ChevronRight /></button></section>
+          <nav className="research-tabs" aria-label={pick(isEnglish, "研究视图", "Research views")}>{(["价格与事件", "财报体检", "证据链", "定量核实", "概览", "待验证问题"] as const).map((item) => <button key={item} className={panel === item ? "active" : ""} onClick={() => setPanel(item)}>{pick(isEnglish, item, item === "价格与事件" ? "Prices & events" : item === "财报体检" ? "Financial health" : item === "证据链" ? "Evidence" : item === "定量核实" ? "Quant check" : item === "概览" ? "Overview" : "Open questions")}{item === "证据链" && <i>{evidenceCount}</i>}{item === "待验证问题" && <i>3</i>}</button>)}</nav>
           {panel === "概览" && <div className="research-panel overview-panel">
             <section className="research-verdict"><div className="verdict-heading"><div><Badge variant="secondary"><Sparkles data-icon="inline-start" />研究摘要</Badge><span>{liveEvidence ? "来自本次公开资料检索" : "仅展示已取得的数据"}</span></div><span className="verdict-state"><i />关键证据仍缺失</span></div><p>{researchSummary}</p><div className="verdict-points">{liveEvidence ? <><span><CheckCircle2 /><b>本次核实</b>{liveEvidence.assessment?.status ?? "已返回公开资料"}</span><span><TriangleAlert /><b>来源覆盖</b>{officialCount} 条正式披露 / {sourceCount} 个来源</span><span><Gauge /><b>仍需验证</b>{profile.gap}</span></> : <><span><CheckCircle2 /><b>价格数据</b>{historyReady ? `${historyPoints.length} 个交易日已载入` : "尚未载入"}</span><span><TriangleAlert /><b>正式披露</b>当前未取得</span><span><Gauge /><b>下一步</b>先查看来源，再形成判断</span></>}</div></section>
             {historyReady ? <section className="signal-board"><SectionHeader title="市场信号" meta="由本次取得的历史价格计算" /><div className="signal-list"><div><span><b>近20日变化</b><em>{liveMomentum >= 0 ? "+" : ""}{liveMomentum.toFixed(1)}%</em></span><i><b style={{ width: `${Math.max(0, Math.min(100, 50 + liveMomentum * 3))}%` }} /></i><small>起止收盘价计算，不代表未来方向</small></div><div><span><b>估值位置</b><em>未接入</em></span><i><b style={{ width: "0%" }} /></i><small>没有统一可比口径时不展示样例分位</small></div><div><span><b>成交活跃度</b><em>{liveActivity ? `${liveActivity.toFixed(0)}%` : "暂无"}</em></span><i><b style={{ width: `${Math.max(0, Math.min(100, liveActivity))}%` }} /></i><small>最近一日成交量 / 近20日均量</small></div></div></section> : <section className="signal-board data-readiness"><SectionHeader title="资料完整度" meta="缺失的数据不会由 AI 猜测" /><div className="readiness-list"><span><CheckCircle2 /><b>实时行情</b><em>{quote ? "已载入" : dataStatus === "loading" ? "连接中" : "暂无"}</em></span><span><CheckCircle2 /><b>历史价格</b><em>{historyPoints.length ? `${historyPoints.length} 个交易日` : dataStatus === "loading" ? "连接中" : "暂无"}</em></span><span><CheckCircle2 /><b>正式披露</b><em>{officialCount ? `${officialCount} 条` : "暂无"}</em></span><span><FileChartColumn /><b>财务基本面</b><em>打开财报体检加载</em></span></div></section>}
@@ -990,8 +1000,8 @@ function ResearchView({ stock, setStock, action, setAction, onDecision, holdings
             </section> : <section className="thesis-card empty-thesis"><div className="thesis-card-heading"><div><span className="eyebrow">我的判断</span><h2>尚未为 {displayName} 建立判断</h2></div><Badge variant="outline">等待用户输入</Badge></div><p>先写清为什么关注、需要核实哪条说法，以及什么情况会推翻判断，再进入交易前审查。</p><button onClick={() => onDecision(submittedQuery ? { reason: submittedQuery, evidence: liveEvidence } : undefined)}>开始建立判断 <ChevronRight /></button></section>}
           </div>}
           {panel === "财报体检" && <FinancialHealthPanel code={stock.code} name={displayName} judgment={recordedJudgment ? { reason: recordedJudgment.reason, invalidation: recordedJudgment.invalidation, reviewedAt: recordedJudgment.reviewedAt } : undefined} />}
-          {panel === "价格与事件" && <section className="research-panel chart-panel"><SectionHeader title="价格、成交量与公司事件" meta="前复权 · 日线；事件不等同于价格原因" action={<Badge variant="outline">{statusLabel}</Badge>} /><PriceChart stock={stock} liveHistory={currentInformation?.history?.data} events={stockEvents} holdingValue={holdingValueFor(holdings, stock.code)} capital={capital} /></section>}
-          {panel === "证据链" && <section className="research-panel evidence-panel"><div className="evidence-summary"><div><BarChart3 /><span><strong>{currentEvidence?.status === "loading" ? "正在核实来源" : `${sourceCount} 个独立来源`}</strong><small>{currentEvidence?.status === "loading" ? "行情已经独立载入，无需等待证据检索" : `正式披露 ${officialCount} · 共 ${evidenceCount} 条公开资料`}</small></span></div><div><strong>{officialCount} / {evidenceCount}</strong><span>正式披露</span></div><div className="attention"><strong>{currentEvidence?.status === "loading" ? "检索中" : assessmentStatus}</strong><span>{liveEvidence?.assessment?.mode === "openai" ? "AI 受限于当前证据" : "规则核实结果"}</span></div></div>{submittedQuery && <div className="research-tool-results"><div><span>输入问题</span><strong>{submittedQuery}</strong></div><article><FileSearch /><span><b>公开披露</b><small>{currentEvidence?.status === "loading" ? "检索中" : `${officialCount} 条 · ${assessmentStatus}`}</small></span></article>{needsFinancialQuery && <article className={currentFinancialQuery?.status === "ready" ? "ready" : "loading"}><FileChartColumn /><span><b>财报勾稽</b><small>{currentFinancialQuery?.status === "ready" ? `${currentFinancialQuery.payload?.coverage.known_checks ?? 0} 项可判断 · ${financialAttentionCount} 项需关注` : currentFinancialQuery?.status === "fallback" ? "财报服务暂不可用" : "正在读取三张报表"}</small></span><button onClick={() => setPanel("财报体检")}>查看体检 <ChevronRight /></button></article>}</div>}<SectionHeader title="证据如何影响判断" meta={liveEvidence?.assessment?.summary ?? (currentEvidence?.status === "loading" ? "正在检索公司公告与公开报道" : "先看来源，再看结论")} action={<Badge variant="outline">{currentEvidence?.status === "loading" ? "核实中" : liveEvidence?.feed?.data_mode === "live" ? "实时公开资料" : "资料降级"}</Badge>} />{currentEvidence?.status === "loading" ? <div className="evidence-loading-state"><FileSearch /><strong>公开资料正在并行核实</strong><span>你可以先查看行情，结果返回后会自动更新。</span></div> : <EvidenceList stockCode={stock.code} liveEvidence={liveEvidence} />}</section>}
+          {panel === "价格与事件" && <section className="research-panel chart-panel"><SectionHeader title={pick(isEnglish, "价格、成交量与公司事件", "Price, volume and company events")} meta={pick(isEnglish, "前复权 · 日线；事件不等同于价格原因", "Forward-adjusted daily data · events do not establish causality")} action={<Badge variant="outline">{statusLabel}</Badge>} /><PriceChart stock={stock} liveHistory={currentInformation?.history?.data} events={stockEvents} holdingValue={holdingValueFor(holdings, stock.code)} capital={capital} /></section>}
+          {panel === "证据链" && <section className="research-panel evidence-panel"><div className="evidence-summary"><div><BarChart3 /><span><strong>{currentEvidence?.status === "loading" ? pick(isEnglish, "正在核实来源", "Verifying sources") : pick(isEnglish, `${sourceCount} 个独立来源`, `${sourceCount} independent sources`)}</strong><small>{currentEvidence?.status === "loading" ? pick(isEnglish, "行情已经独立载入，无需等待证据检索", "Market data is loaded independently; you do not need to wait") : pick(isEnglish, `正式披露 ${officialCount} · 共 ${evidenceCount} 条公开资料`, `${officialCount} official filings · ${evidenceCount} public items`)}</small></span></div><div><strong>{officialCount} / {evidenceCount}</strong><span>{pick(isEnglish, "正式披露", "Official filings")}</span></div><div className="attention"><strong>{currentEvidence?.status === "loading" ? pick(isEnglish, "检索中", "Searching") : assessmentStatus}</strong><span>{liveEvidence?.assessment?.mode === "openai" ? pick(isEnglish, "AI 受限于当前证据", "AI limited to current evidence") : pick(isEnglish, "规则核实结果", "Rules-based verification")}</span></div></div>{submittedQuery && <div className="research-tool-results"><div><span>{pick(isEnglish, "输入问题", "Question")}</span><strong>{submittedQuery}</strong></div><article><FileSearch /><span><b>{pick(isEnglish, "公开披露", "Public disclosures")}</b><small>{currentEvidence?.status === "loading" ? pick(isEnglish, "检索中", "Searching") : pick(isEnglish, `${officialCount} 条 · ${assessmentStatus}`, `${officialCount} items · ${assessmentStatus}`)}</small></span></article>{needsFinancialQuery && <article className={currentFinancialQuery?.status === "ready" ? "ready" : "loading"}><FileChartColumn /><span><b>{pick(isEnglish, "财报勾稽", "Financial cross-check")}</b><small>{currentFinancialQuery?.status === "ready" ? pick(isEnglish, `${currentFinancialQuery.payload?.coverage.known_checks ?? 0} 项可判断 · ${financialAttentionCount} 项需关注`, `${currentFinancialQuery.payload?.coverage.known_checks ?? 0} checks available · ${financialAttentionCount} need attention`) : currentFinancialQuery?.status === "fallback" ? pick(isEnglish, "财报服务暂不可用", "Financial data unavailable") : pick(isEnglish, "正在读取三张报表", "Reading the three statements")}</small></span><button onClick={() => setPanel("财报体检")}>{pick(isEnglish, "查看体检", "View checks")} <ChevronRight /></button></article>}</div>}<SectionHeader title={pick(isEnglish, "证据如何影响判断", "How evidence affects the thesis")} meta={liveEvidence?.assessment?.summary ?? (currentEvidence?.status === "loading" ? pick(isEnglish, "正在检索公司公告与公开报道", "Searching company filings and public reports") : pick(isEnglish, "先看来源，再看结论", "Read the sources before the conclusion"))} action={<Badge variant="outline">{currentEvidence?.status === "loading" ? pick(isEnglish, "核实中", "Verifying") : liveEvidence?.feed?.data_mode === "live" ? pick(isEnglish, "实时公开资料", "Current public sources") : pick(isEnglish, "资料降级", "Degraded sources")}</Badge>} />{currentEvidence?.status === "loading" ? <div className="evidence-loading-state"><FileSearch /><strong>{pick(isEnglish, "公开资料正在并行核实", "Public sources are being verified")}</strong><span>{pick(isEnglish, "你可以先查看行情，结果返回后会自动更新。", "You can inspect market data while the results update.")}</span></div> : <EvidenceList stockCode={stock.code} liveEvidence={liveEvidence} />}</section>}
           {panel === "定量核实" && <QuantVerificationPanel key={`${stock.code}:${quantVerifications.find((item) => item.hypothesis.stockCode === stock.code)?.savedAt ?? "new"}`} stock={effectiveStock} saved={quantVerifications.find((item) => item.hypothesis.stockCode === stock.code)} onSave={onSaveQuant} onDecision={(verification) => onDecision({ reason: submittedQuery || verification.originalQuestion, evidence: liveEvidence, quantVerification: verification })} />}
           {panel === "待验证问题" && <section className="research-panel questions-section"><SectionHeader title="下一步要验证什么" meta="这些问题会带入决策审查" /><ol><li><span>01</span><p><strong>{profile.gap}何时能够得到确认？</strong><small>优先使用公司公告和下一期财报验证。</small></p><Badge variant="outline">财报发布后</Badge></li><li><span>02</span><p><strong>价格变化是否对应可核实的经营变化？</strong><small>先看事件时间与公开来源，不把相关性当作因果。</small></p><Badge variant="outline">持续观察</Badge></li><li><span>03</span><p><strong>什么变化会推翻当前判断？</strong><small>{recordedJudgment?.invalidation || "尚未设置；完成一次决策审查后会保存到这里。"}</small></p><Badge variant={recordedJudgment?.invalidation ? "secondary" : "outline"}>{recordedJudgment?.invalidation ? "已设置" : "待填写"}</Badge></li></ol></section>}
         </article>
